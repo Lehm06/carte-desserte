@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Desserte d'un site</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1b1b1b; --muted: #636363; --line: #e2e0da;
+    --accent: #0b6b57; --bus: #1d4ed8; --velo: #15803d; --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); display: grid; grid-template-columns: 400px 1fr; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px 20px 28px; display: flex; flex-direction: column; gap: 18px; }
+  h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .sub { color: var(--muted); margin: 4px 0 0; }
+  form { display: flex; gap: 8px; }
+  input[type=search] { flex: 1; padding: 10px 12px; border: 1px solid #c9c6bd; border-radius: 8px; font: inherit; min-width: 0; }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; padding: 10px 14px; font-weight: 600; }
+  button:hover { filter: brightness(1.1); }
+  button.ghost { background: transparent; color: var(--accent); }
+  #suggestions { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: none; }
+  #suggestions li { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
+  #suggestions li:last-child { border-bottom: 0; }
+  #suggestions li:hover { background: var(--bg); }
+  .status { color: var(--muted); min-height: 1.4em; }
+  .status.err { color: #b91c1c; }
+  .score { display: none; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .score .top { display: flex; align-items: baseline; gap: 10px; }
+  .score .num { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -.03em; }
+  .score .num small { font-size: 18px; color: var(--muted); font-weight: 500; }
+  .score .verdict { font-weight: 600; font-size: 15px; }
+  .bar { height: 8px; background: #ecebe6; border-radius: 4px; overflow: hidden; margin: 6px 0 12px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .crit { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 5px 0; border-top: 1px solid var(--line); }
+  .crit span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .sect { display: flex; justify-content: space-between; font-weight: 600; margin-top: 10px; }
+  .lines { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px 3px 4px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; background: #fff; font-size: 13px; }
+  .chip:hover, .chip.on { border-color: var(--ink); }
+  .chip b { min-width: 26px; text-align: center; padding: 1px 6px; border-radius: 999px; color: #fff; font-size: 12px; }
+  .chip em { font-style: normal; color: var(--muted); font-size: 12px; }
+  .opts { display: flex; flex-direction: column; gap: 6px; }
+  .opts label { display: flex; gap: 8px; align-items: center; }
+  .note { font-size: 12.5px; color: var(--muted); }
+  .note.warn { color: var(--warn); }
+  #map { height: 100%; width: 100%; }
+  .legend { background: #fff; padding: 8px 10px; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.25); font-size: 12.5px; line-height: 1.7; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 4px solid; vertical-align: middle; margin-right: 6px; }
+  @media (max-width: 800px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 55vh 45vh; }
+    aside { order: 2; border-right: 0; border-top: 1px solid var(--line); }
+    #map { order: 1; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <div>
+    <h1>Desserte d'un site</h1>
+    <p class="sub">Lignes de bus, pistes cyclables et note de desserte autour d'une adresse.</p>
+  </div>
+
+  <div>
+    <form id="f" autocomplete="off">
+      <input type="search" id="q" placeholder="Saisir une adresse (ou cliquer sur la carte)" aria-label="Adresse">
+      <button type="submit">Analyser</button>
+    </form>
+    <ul id="suggestions"></ul>
+    <div id="status" class="status" role="status"></div>
+  </div>
+
+  <section class="score" id="score" aria-live="polite">
+    <h2>Note de desserte</h2>
+    <div class="top"><div class="num"><span id="sc">0</span><small>/100</small></div><div class="verdict" id="verdict"></div></div>
+    <div class="bar"><i id="scbar" style="width:0"></i></div>
+    <div id="detail"></div>
+  </section>
+
+  <section id="linesBox" style="display:none">
+    <h2>Lignes de bus à proximité (<span id="nLines">0</span>)</h2>
+    <div class="lines" id="lines"></div>
+    <p class="note" style="margin-top:8px">Cliquer sur une ligne pour la mettre en évidence sur la carte.</p>
+  </section>
+
+  <section>
+    <h2>Affichage</h2>
+    <div class="opts">
+      <label><input type="checkbox" id="tBus" checked> Lignes et arrêts de bus</label>
+      <label><input type="checkbox" id="tVelo" checked> Aménagements cyclables</label>
+      <label><input type="checkbox" id="tCercle" checked> Cercles de 500 m et 800 m</label>
+    </div>
+  </section>
+
+  <p class="note warn">Limites : les distances sont à vol d'oiseau, la fréquence de passage des bus n'est pas évaluée (absente d'OpenStreetMap), et les données dépendent de la complétude de la cartographie locale. Une vérification sur le terrain ou auprès de l'autorité organisatrice reste recommandée.</p>
+  <p class="note">Sources : OpenStreetMap (Overpass), Base Adresse Nationale.</p>
+</aside>
+<div id="map"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const R_BUS = 800, R_BUS_SCORE = 500, R_VELO = 1000, R_VELO_LEN = 500;
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const PALETTE = ["#1d4ed8","#c2410c","#7e22ce","#0f766e","#be123c","#a16207","#0369a1","#4d7c0f","#9d174d","#4338ca","#b45309","#047857"];
+
+const map = L.map("map", { zoomControl: true }).setView([46.6, 2.5], 6);
+L.tileLayer("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}", { maxZoom: 19, attribution: "© IGN, Plan IGN | Données transport © contributeurs OpenStreetMap" }).addTo(map);
+
+const gBus = L.layerGroup().addTo(map), gVelo = L.layerGroup().addTo(map), gCircle = L.layerGroup().addTo(map), gSite = L.layerGroup().addTo(map);
+let lineLayers = {}, current = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtM = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m) + " m";
+
+function hav(a, b) {
+  const r = Math.PI / 180, dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
+  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2;
+  return 12742000 * Math.asin(Math.sqrt(x));
+}
+function setStatus(t, err) { const s = $("status"); s.textContent = t; s.className = "status" + (err ? " err" : ""); }
+
+// ---------- Géocodage ----------
+async function geocode(q) {
+  const r = await fetch("https://api-adresse.data.gouv.fr/search/?limit=5&q=" + encodeURIComponent(q));
+  const j = await r.json();
+  return j.features.map(f => ({ label: f.properties.label, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+}
+async function reverse(lat, lon) {
+  try {
+    const r = await fetch(`https://api-adresse.data.gouv.fr/reverse/?lat=${lat}&lon=${lon}`);
+    const j = await r.json();
+    return j.features[0]?.properties.label || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  } catch { return `${lat.toFixed(5)}, ${lon.toFixed(5)}`; }
+}
+
+// ---------- Overpass ----------
+async function overpass(query) {
+  let lastErr;
+  for (const url of OVERPASS) {
+    try {
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(query), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return (await r.json()).elements;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+function busQuery(lat, lon) {
+  const d = (R_BUS + 1500) / 111000, dl = d / Math.cos(lat * Math.PI / 180);
+  const bb = [lat - d, lon - dl, lat + d, lon + dl].map(v => v.toFixed(5)).join(",");
+  return `[out:json][timeout:40];
+(node["highway"="bus_stop"](around:${R_BUS},${lat},${lon});node["public_transport"="platform"]["bus"="yes"](around:${R_BUS},${lat},${lon}););->.s;
+rel(bn.s)["route"="bus"]->.r;
+.s out body;
+.r out geom(${bb});`;
+}
+function veloQuery(lat, lon) {
+  const a = `(around:${R_VELO},${lat},${lon})`;
+  return `[out:json][timeout:40];
+(way["highway"="cycleway"]${a};
+way["cycleway"~"^(lane|track|opposite_lane|opposite_track|share_busway|shared_lane)$"]${a};
+way["cycleway:left"~"^(lane|track|opposite_lane|opposite_track|share_busway)$"]${a};
+way["cycleway:right"~"^(lane|track|opposite_lane|opposite_track|share_busway)$"]${a};
+way["cycleway:both"~"^(lane|track|share_busway)$"]${a};
+way["highway"~"^(path|footway|track)$"]["bicycle"="designated"]${a};
+way["highway"="living_street"]${a};
+);
+out geom;`;
+}
+
+// ---------- Traitement ----------
+function processBus(els, site) {
+  const stops = {}, groups = {};
+  els.filter(e => e.type === "node").forEach(n => {
+    stops[n.id] = { id: n.id, pos: [n.lat, n.lon], name: n.tags?.name || "Arrêt sans nom", lines: new Set(), dist: hav(site, [n.lat, n.lon]) };
+  });
+  els.filter(e => e.type === "relation").forEach(r => {
+    const t = r.tags || {};
+    const ref = t.ref || t.name || "?";
+    const key = ref + "|" + (t.network || t.operator || "");
+    const g = groups[key] ||= { key, ref, network: t.network || t.operator || "", names: new Set(), segs: [], stopIds: new Set() };
+    if (t.name) g.names.add(t.name);
+    if (t.colour && !g.colour) g.colour = t.colour;
+    (r.members || []).forEach(m => {
+      if (m.type === "way" && m.geometry) g.segs.push(m.geometry.filter(p => p).map(p => [p.lat, p.lon]));
+      if (m.type === "node" && stops[m.ref]) { stops[m.ref].lines.add(key); g.stopIds.add(m.ref); }
+    });
+  });
+  const list = Object.values(groups).filter(g => g.stopIds.size);
+  list.sort((a, b) => a.ref.localeCompare(b.ref, "fr", { numeric: true }));
+  list.forEach((g, i) => { g.color = /^#[0-9a-f]{3,8}$/i.test(g.colour || "") ? g.colour : PALETTE[i % PALETTE.length]; g.dmin = Math.min(...[...g.stopIds].map(id => stops[id].dist)); });
+  return { stops: Object.values(stops).sort((a, b) => a.dist - b.dist), lines: list };
+}
+
+function processVelo(els, site) {
+  const ways = [];
+  els.filter(e => e.type === "way" && e.geometry).forEach(w => {
+    const t = w.tags || {};
+    const pts = w.geometry.map(p => [p.lat, p.lon]);
+    const dedie = t.highway === "cycleway" || /track/.test([t.cycleway, t["cycleway:left"], t["cycleway:right"], t["cycleway:both"]].join(" ")) || t.bicycle === "designated";
+    const calme = t.highway === "living_street";
+    ways.push({ pts, kind: dedie ? "dedie" : calme ? "calme" : "bande", name: t.name || "" });
+  });
+  let dmin = Infinity, len = 0, lenDedie = 0;
+  ways.forEach(w => {
+    for (let i = 0; i < w.pts.length; i++) {
+      dmin = Math.min(dmin, hav(site, w.pts[i]));
+      if (i) {
+        const mid = [(w.pts[i][0] + w.pts[i - 1][0]) / 2, (w.pts[i][1] + w.pts[i - 1][1]) / 2];
+        if (w.kind !== "calme" && hav(site, mid) <= R_VELO_LEN) { const l = hav(w.pts[i - 1], w.pts[i]); len += l; if (w.kind === "dedie") lenDedie += l; }
+      }
+    }
+  });
+  const real = ways.filter(w => w.kind !== "calme");
+  let dreal = Infinity; real.forEach(w => w.pts.forEach(p => dreal = Math.min(dreal, hav(site, p))));
+  return { ways, dmin: dreal, len, lenDedie };
+}
+
+// ---------- Note ----------
+function scoreAll(bus, velo) {
+  const dStop = bus.stops.length ? bus.stops[0].dist : Infinity;
+  const nL = bus.lines.filter(l => [...l.stopIds].some(id => bus.stops.find(s => s.id === id).dist <= R_BUS_SCORE)).length;
+  const sBusProx = dStop <= 150 ? 30 : dStop <= 300 ? 26 : dStop <= 450 ? 20 : dStop <= 600 ? 14 : dStop <= 800 ? 8 : 0;
+  const sBusDiv = nL === 0 ? 0 : nL === 1 ? 8 : nL === 2 ? 15 : nL === 3 ? 21 : nL <= 5 ? 26 : 30;
+  const dV = velo.dmin;
+  const sVProx = dV <= 100 ? 20 : dV <= 250 ? 16 : dV <= 500 ? 10 : dV <= 1000 ? 4 : 0;
+  const sVLen = velo.len === 0 ? 0 : velo.len < 300 ? 5 : velo.len < 1000 ? 10 : velo.len < 2500 ? 15 : 20;
+  const total = sBusProx + sBusDiv + sVProx + sVLen;
+  const verdict = total >= 75 ? "Très bien desservi" : total >= 55 ? "Bien desservi" : total >= 35 ? "Desserte moyenne" : total >= 15 ? "Desserte faible" : "Très mal desservi";
+  return { total, verdict, dStop, nL, sBusProx, sBusDiv, sVProx, sVLen, dV };
+}
+
+function renderScore(s, velo) {
+  $("score").style.display = "block";
+  $("sc").textContent = s.total;
+  $("scbar").style.width = s.total + "%";
+  $("scbar").style.background = s.total >= 55 ? "#0b6b57" : s.total >= 35 ? "#b45309" : "#b91c1c";
+  $("verdict").textContent = s.verdict;
+  const c = (a, b) => `<div class="crit"><span>${a}</span><span>${b}</span></div>`;
+  $("detail").innerHTML =
+    `<div class="sect"><span>Bus</span><span>${s.sBusProx + s.sBusDiv}/60</span></div>` +
+    c("Arrêt le plus proche : " + (isFinite(s.dStop) ? fmtM(s.dStop) : "aucun dans 800 m"), s.sBusProx + "/30") +
+    c(`Lignes distinctes à moins de 500 m : ${s.nL}`, s.sBusDiv + "/30") +
+    `<div class="sect"><span>Vélo</span><span>${s.sVProx + s.sVLen}/40</span></div>` +
+    c("Aménagement cyclable le plus proche : " + (isFinite(s.dV) ? fmtM(s.dV) : "aucun dans 1 km"), s.sVProx + "/20") +
+    c(`Linéaire cyclable à moins de 500 m : ${fmtM(velo.len)} (dont ${fmtM(velo.lenDedie)} en site propre)`, s.sVLen + "/20");
+}
+
+// ---------- Dessin ----------
+function draw(site, label, bus, velo) {
+  [gBus, gVelo, gCircle, gSite].forEach(g => g.clearLayers());
+  lineLayers = {};
+  L.circle(site, { radius: R_BUS, color: "#636363", weight: 1, dashArray: "4 4", fillOpacity: 0.02 }).addTo(gCircle);
+  L.circle(site, { radius: R_BUS_SCORE, color: "#636363", weight: 1, dashArray: "4 4", fillOpacity: 0.04 }).addTo(gCircle);
+  L.marker(site).bindPopup("<b>Site analysé</b><br>" + esc(label)).addTo(gSite);
+
+  velo.ways.forEach(w => {
+    const st = w.kind === "dedie" ? { color: "#15803d", weight: 4, opacity: .9 } : w.kind === "bande" ? { color: "#65a30d", weight: 3, dashArray: "6 5", opacity: .9 } : { color: "#a3a3a3", weight: 2, dashArray: "2 5", opacity: .8 };
+    L.polyline(w.pts, st).bindTooltip(w.name || { dedie: "Piste cyclable", bande: "Bande cyclable", calme: "Zone apaisée" }[w.kind]).addTo(gVelo);
+  });
+
+  bus.lines.forEach(g => {
+    const grp = L.layerGroup();
+    g.segs.forEach(s => s.length > 1 && L.polyline(s, { color: g.color, weight: 3.5, opacity: .75 }).addTo(grp));
+    grp.addTo(gBus); lineLayers[g.key] = { grp, g };
+  });
+  bus.stops.forEach(s => {
+    const ls = bus.lines.filter(l => s.lines.has(l.key)).map(l => `<b style="background:${l.color};color:#fff;padding:1px 6px;border-radius:9px">${esc(l.ref)}</b>`).join(" ");
+    L.circleMarker(s.pos, { radius: 5, color: "#fff", weight: 1.5, fillColor: "#1b1b1b", fillOpacity: 1 })
+      .bindPopup(`<b>${esc(s.name)}</b><br>${fmtM(s.dist)} du site<br>${ls || "Lignes non renseignées"}`).addTo(gBus);
+  });
+
+  const box = $("linesBox"); box.style.display = "block";
+  $("nLines").textContent = bus.lines.length;
+  $("lines").innerHTML = bus.lines.length ? bus.lines.map(g =>
+    `<span class="chip" data-k="${esc(g.key)}" title="${esc([...g.names][0] || "")}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${fmtM(g.dmin)}</em></span>`).join("") : '<span class="note">Aucune ligne de bus recensée dans OpenStreetMap à moins de 800 m.</span>';
+  document.querySelectorAll(".chip").forEach(ch => ch.onclick = () => highlight(ch.dataset.k, ch));
+
+  const all = L.featureGroup([L.circle(site, { radius: R_BUS })]);
+  map.fitBounds(all.getBounds().pad(0.1));
+  applyToggles();
+}
+
+function highlight(k, chip) {
+  const on = !chip.classList.contains("on");
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  Object.entries(lineLayers).forEach(([key, { grp, g }]) => grp.eachLayer(l => l.setStyle && l.setStyle({ weight: !on ? 3.5 : key === k ? 6 : 2, opacity: !on ? .75 : key === k ? 1 : .2 })));
+  if (on) { chip.classList.add("on"); const L0 = lineLayers[k]; if (L0) { const pts = L0.g.segs.flat(); if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.1)); } }
+}
+
+function applyToggles() {
+  [[gBus, "tBus"], [gVelo, "tVelo"], [gCircle, "tCercle"]].forEach(([g, id]) => {
+    const want = $(id).checked;
+    if (want && !map.hasLayer(g)) g.addTo(map); else if (!want && map.hasLayer(g)) map.removeLayer(g);
+  });
+}
+["tBus", "tVelo", "tCercle"].forEach(id => $(id).onchange = applyToggles);
+
+// ---------- Orchestration ----------
+async function analyse(lat, lon, label) {
+  const site = [lat, lon];
+  setStatus("Chargement des lignes de bus et des pistes cyclables…");
+  try {
+    const [busEls, veloEls] = await Promise.all([overpass(busQuery(lat, lon)), overpass(veloQuery(lat, lon))]);
+    const bus = processBus(busEls, site), velo = processVelo(veloEls, site);
+    const s = scoreAll(bus, velo);
+    draw(site, label, bus, velo);
+    renderScore(s, velo);
+    $("q").value = label;
+    setStatus(`${bus.stops.length} arrêt(s), ${bus.lines.length} ligne(s), ${velo.ways.filter(w => w.kind !== "calme").length} tronçon(s) cyclable(s).`);
+  } catch (e) {
+    setStatus("Les données OpenStreetMap n'ont pas pu être chargées (" + e.message + "). Réessayer dans un instant.", true);
+  }
+}
+
+$("f").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const q = $("q").value.trim(); if (!q) return;
+  $("suggestions").style.display = "none";
+  setStatus("Recherche de l'adresse…");
+  try {
+    const res = await geocode(q);
+    if (!res.length) return setStatus("Adresse introuvable.", true);
+    if (res.length === 1) return analyse(res[0].lat, res[0].lon, res[0].label);
+    const ul = $("suggestions"); ul.innerHTML = res.map((r, i) => `<li data-i="${i}">${esc(r.label)}</li>`).join(""); ul.style.display = "block";
+    setStatus("Plusieurs adresses possibles, choisir la bonne.");
+    ul.onclick = e => { const li = e.target.closest("li"); if (!li) return; const r = res[li.dataset.i]; ul.style.display = "none"; analyse(r.lat, r.lon, r.label); };
+  } catch { setStatus("Le service d'adresses ne répond pas.", true); }
+});
+
+map.on("click", async e => { const label = await reverse(e.latlng.lat, e.latlng.lng); analyse(e.latlng.lat, e.latlng.lng, label); });
+
+const leg = L.control({ position: "bottomright" });
+leg.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.innerHTML = '<i style="border-color:#15803d"></i>Piste cyclable<br><i style="border-color:#65a30d;border-top-style:dashed"></i>Bande cyclable<br><i style="border-color:#a3a3a3;border-top-style:dotted"></i>Zone apaisée<br><i style="border-color:#1d4ed8"></i>Ligne de bus'; return d; };
+leg.addTo(map);
+</script>
+</body>
+</html>
