@@ -85,6 +85,18 @@
     <div id="detail"></div>
   </section>
 
+  <section id="isoBox" style="display:none">
+    <h2>Zone d'accès au site</h2>
+    <div class="opts">
+      <label><input type="checkbox" id="tIso" checked> Afficher les zones de temps (transports en commun)</label>
+      <label><input type="checkbox" id="tRing"> Afficher les anneaux vélo (15 et 30 min)</label>
+      <label>Fréquence retenue <select id="isoMode"><option value="pointe" selected>Heure de pointe</option><option value="jour">Journée moyenne</option></select></label>
+    </div>
+    <div id="isoStatus" class="note" style="margin:6px 0"></div>
+    <div id="isoTable"></div>
+    <p class="note" style="margin-top:6px">Temps estimé de porte à porte : marche vers l'arrêt, attente (moitié de l'intervalle entre deux passages), trajet et correspondances. Précision de l'ordre de 10 min. Population comptée par commune, selon la position de son centre : les grandes communes sont comptées en bloc.</p>
+  </section>
+
   <section id="linesBox" style="display:none">
     <h2>Lignes de bus à proximité (<span id="nLines">0</span>)</h2>
     <div class="lines" id="lines"></div>
@@ -96,6 +108,8 @@
     <div class="opts">
       <label><input type="checkbox" id="tBus" checked> Lignes et arrêts de bus</label>
       <label><input type="checkbox" id="tVelo" checked> Aménagements cyclables</label>
+      <label>Lignes de bus jusqu'à <select id="dBus"><option value="2000">2 km</option><option value="5000">5 km</option><option value="10000">10 km</option><option value="20000">20 km</option><option value="40000" selected>40 km</option></select></label>
+      <label>Pistes cyclables jusqu'à <select id="dVelo"><option value="1000">1 km</option><option value="2000">2 km</option><option value="5000">5 km</option><option value="10000" selected>10 km</option></select></label>
       <label><input type="checkbox" id="tCercle" checked> Cercles de 500 m et 800 m</label>
     </div>
   </section>
@@ -108,13 +122,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const R_BUS = 800, R_BUS_SCORE = 500, R_VELO = 1000, R_VELO_LEN = 500;
+let DISP_BUS = 40000, DISP_VELO = 10000, lastSite = null;
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const PALETTE = ["#1d4ed8","#c2410c","#7e22ce","#0f766e","#be123c","#a16207","#0369a1","#4d7c0f","#9d174d","#4338ca","#b45309","#047857"];
 
-const map = L.map("map", { zoomControl: true }).setView([46.6, 2.5], 6);
+const map = L.map("map", { zoomControl: true, preferCanvas: true }).setView([46.6, 2.5], 6);
 L.tileLayer("https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}", { maxZoom: 19, attribution: "© IGN, Plan IGN | Données transport © contributeurs OpenStreetMap" }).addTo(map);
 
-const gBus = L.layerGroup().addTo(map), gVelo = L.layerGroup().addTo(map), gCircle = L.layerGroup().addTo(map), gSite = L.layerGroup().addTo(map);
+const gBus = L.layerGroup().addTo(map), gVelo = L.layerGroup().addTo(map), gCircle = L.layerGroup().addTo(map), gSite = L.layerGroup().addTo(map), gStops = L.layerGroup();
 let lineLayers = {}, current = null;
 
 const $ = id => document.getElementById(id);
@@ -284,11 +299,11 @@ const MODE_LABEL = { bus: "Bus", tram: "Tramway", metro: "Métro", train: "Train
 
 function localBus(reg, site) {
   const { routes, stops } = reg.bus;
-  const dlat = R_BUS / 111000, dlon = dlat / Math.cos(site[0] * Math.PI / 180);
+  const dlat = DISP_BUS / 111000, dlon = dlat / Math.cos(site[0] * Math.PI / 180);
   const near = [];
   stops.forEach(s => {
     if (Math.abs(s[0] - site[0]) > dlat || Math.abs(s[1] - site[1]) > dlon) return;
-    const d = hav(site, [s[0], s[1]]); if (d <= R_BUS) near.push({ s, d });
+    const d = hav(site, [s[0], s[1]]); if (d <= DISP_BUS) near.push({ s, d });
   });
   near.sort((a, b) => a.d - b.d);
   const gk = i => { const r = routes[i]; return r.r + "|" + r.net + "|" + r.m; };
@@ -305,7 +320,7 @@ function localBus(reg, site) {
     if (d <= R_BUS_SCORE) passages500 += s[3];
     stopsOut.push({ id, pos: [s[0], s[1]], name: s[2], lines: keys, dist: d, n: s[3] });
   });
-  const dla = (R_BUS + 1500) / 111000, dlo = dla / Math.cos(site[0] * Math.PI / 180);
+  const dla = (DISP_BUS + 1500) / 111000, dlo = dla / Math.cos(site[0] * Math.PI / 180);
   const list = Object.values(groups);
   list.sort((a, b) => a.ref.localeCompare(b.ref, "fr", { numeric: true }));
   list.forEach((g, i) => {
@@ -320,15 +335,190 @@ function localBus(reg, site) {
 }
 
 function localVelo(reg, site) {
-  const dla = (R_VELO + 300) / 111000, dlo = dla / Math.cos(site[0] * Math.PI / 180);
+  const dla = (Math.max(R_VELO, DISP_VELO) + 300) / 111000, dlo = dla / Math.cos(site[0] * Math.PI / 180);
   const ways = reg.ways.filter(w => w.bb[0] < site[0] + dla && w.bb[2] > site[0] - dla && w.bb[1] < site[1] + dlo && w.bb[3] > site[1] - dlo);
   return veloStats(ways, site);
 }
 
+
+// ---------- Isochrones (réseaux de transport en commun) ----------
+const WALK = 75, DETOUR = 1.3, MAX_WALK_MIN = 12, ISO_MAX = 75, ISO_RADIUS_KM = 70, CELL_M = 250;
+const BANDS = [15, 30, 45, 60];
+const BAND_COL = [[11, 61, 51], [31, 122, 101], [111, 184, 162], [195, 227, 216]];
+map.createPane("iso"); map.getPane("iso").style.zIndex = 250;
+const gIso = L.layerGroup().addTo(map), gRing = L.layerGroup();
+const NETS = {};
+
+function regionsAround(site) {
+  const dla = ISO_RADIUS_KM / 111, dlo = dla / Math.cos(site[0] * Math.PI / 180);
+  return INDEX.regions.filter(g => g.bbox[0] < site[0] + dla && g.bbox[2] > site[0] - dla && g.bbox[1] < site[1] + dlo && g.bbox[3] > site[1] - dlo);
+}
+
+function buildNet(regs) {
+  const lat = [], lon = [], sr = [], patR = [], patS = [], patT = [], coms = [];
+  let sOff = 0, rOff = 0;
+  regs.forEach(r => {
+    const b = r.bus;
+    b.stops.forEach(s => { lat.push(s[0]); lon.push(s[1]); sr.push(s[5].map(x => [x[0] + rOff, x[1], x[2] || 0])); });
+    (b.pat || []).forEach(q => { patR.push(q[0] + rOff); patS.push(q[1].map(i => i + sOff)); patT.push(q[2]); });
+    (b.com || []).forEach(c => coms.push(c));
+    sOff += b.stops.length; rOff += b.routes.length;
+  });
+  const S = lat.length, base = []; let P = 0;
+  patS.forEach(a => { base.push(P); P += a.length; });
+  const pStop = new Int32Array(P), pRoute = new Int32Array(P), pDt = new Float32Array(P), pPrev = new Uint8Array(P);
+  const stopP = Array.from({ length: S }, () => []);
+  patS.forEach((a, k) => a.forEach((st, j) => {
+    const id = base[k] + j; pStop[id] = st; pRoute[id] = patR[k]; stopP[st].push(id);
+    if (j > 0) { pPrev[id] = 1; pDt[id] = Math.max(0, patT[k][j] - patT[k][j - 1]); }
+  }));
+  const grid = new Map(), K = 0.003;
+  const gk = (a, o) => Math.floor(a / K) * 100000 + Math.floor(o / (K * 1.3));
+  for (let i = 0; i < S; i++) { const k = gk(lat[i], lon[i]); (grid.get(k) || grid.set(k, []).get(k)).push(i); }
+  return { S, P, lat, lon, sr, pStop, pRoute, pDt, pPrev, stopP, grid, gk, K, coms, waits: {} };
+}
+
+function getWaits(net, mode) {
+  if (net.waits[mode]) return net.waits[mode];
+  const w = new Float32Array(net.P);
+  for (let id = 0; id < net.P; id++) {
+    const e = net.sr[net.pStop[id]].find(x => x[0] === net.pRoute[id]);
+    let h = 60;
+    if (e) h = mode === "pointe" ? (e[2] > 0 ? 240 / e[2] : e[1] > 0 ? 960 / e[1] : 60) : (e[1] > 0 ? 960 / e[1] : 60);
+    w[id] = Math.min(h, 90) / 2 + 1;
+  }
+  return net.waits[mode] = w;
+}
+
+function nearStops(net, la, lo, rM) {
+  const out = [], rLat = rM / 111000, rLon = rLat / Math.cos(la * Math.PI / 180);
+  for (let a = Math.floor((la - rLat) / net.K); a <= Math.floor((la + rLat) / net.K); a++)
+    for (let b = Math.floor((lo - rLon) / (net.K * 1.3)); b <= Math.floor((lo + rLon) / (net.K * 1.3)); b++) {
+      const arr = net.grid.get(a * 100000 + b); if (!arr) continue;
+      for (const i of arr) { const d = hav([la, lo], [net.lat[i], net.lon[i]]); if (d <= rM) out.push([i, d]); }
+    }
+  return out;
+}
+
+class Heap {
+  constructor() { this.d = []; this.n = []; }
+  get size() { return this.d.length; }
+  push(d, n) {
+    const D = this.d, N = this.n; let i = D.length; D.push(d); N.push(n);
+    while (i > 0) { const p = (i - 1) >> 1; if (D[p] <= d) break; D[i] = D[p]; N[i] = N[p]; i = p; }
+    D[i] = d; N[i] = n;
+  }
+  pop() {
+    const D = this.d, N = this.n, rd = D[0], rn = N[0], ld = D.pop(), ln = N.pop();
+    if (D.length) {
+      let i = 0; const len = D.length;
+      for (;;) { let c = 2 * i + 1; if (c >= len) break; if (c + 1 < len && D[c + 1] < D[c]) c++; if (D[c] >= ld) break; D[i] = D[c]; N[i] = N[c]; i = c; }
+      D[i] = ld; N[i] = ln;
+    }
+    return [rd, rn];
+  }
+}
+
+// Temps (min) pour rejoindre le site depuis chaque arrêt, recherche inversée
+function isoStops(net, site, mode) {
+  const { S, P } = net, wait = getWaits(net, mode);
+  const DS = new Float64Array(S).fill(Infinity), DP = new Float64Array(P).fill(Infinity), h = new Heap();
+  nearStops(net, site[0], site[1], MAX_WALK_MIN * WALK / DETOUR).forEach(([i, d]) => { const t = d * DETOUR / WALK; DS[i] = t; h.push(t, i); });
+  while (h.size) {
+    const [d, x] = h.pop(); if (d > ISO_MAX) break;
+    if (x < S) {
+      if (d > DS[x]) continue;
+      for (const id of net.stopP[x]) if (d < DP[id]) { DP[id] = d; h.push(d, S + id); }
+      for (const [n, dist] of nearStops(net, net.lat[x], net.lon[x], 250)) {
+        const nd = d + dist * DETOUR / WALK + 1; if (nd < DS[n]) { DS[n] = nd; h.push(nd, n); }
+      }
+    } else {
+      const id = x - S; if (d > DP[id]) continue;
+      if (net.pPrev[id]) { const nd = d + net.pDt[id]; if (nd < DP[id - 1]) { DP[id - 1] = nd; h.push(nd, S + id - 1); } }
+      const st = net.pStop[id], nd = d + wait[id];
+      if (nd < DS[st]) { DS[st] = nd; h.push(nd, st); }
+    }
+  }
+  return DS;
+}
+
+function isoRaster(net, DS, site) {
+  const dla = ISO_RADIUS_KM / 111, dlo = dla / Math.cos(site[0] * Math.PI / 180);
+  const latMin = site[0] - dla, lonMin = site[1] - dlo;
+  const cLat = CELL_M / 111000, cLon = cLat / Math.cos(site[0] * Math.PI / 180);
+  const H = Math.ceil(2 * dla / cLat), W = Math.ceil(2 * dlo / cLon);
+  const T = new Float32Array(W * H).fill(Infinity);
+  const splat = (la, lo, t0, maxMin) => {
+    const rM = Math.min(maxMin, MAX_WALK_MIN) * WALK / DETOUR, r = Math.ceil(rM / CELL_M);
+    const cy = Math.floor((la - latMin) / cLat), cx = Math.floor((lo - lonMin) / cLon);
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const y = cy + dy, x = cx + dx; if (y < 0 || y >= H || x < 0 || x >= W) continue;
+      const dm = Math.hypot(dy, dx) * CELL_M; if (dm > rM) continue;
+      const t = t0 + dm * DETOUR / WALK, k = y * W + x; if (t < T[k]) T[k] = t;
+    }
+  };
+  for (let i = 0; i < net.S; i++) if (DS[i] < 60) splat(net.lat[i], net.lon[i], DS[i], 60 - DS[i]);
+  splat(site[0], site[1], 0, 20);
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = T[y * W + x]; const b = t <= 15 ? 0 : t <= 30 ? 1 : t <= 45 ? 2 : t <= 60 ? 3 : -1;
+    if (b < 0) continue;
+    const o = ((H - 1 - y) * W + x) * 4, c = BAND_COL[b];
+    img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 150;
+  }
+  ctx.putImageData(img, 0, 0);
+  return { url: cv.toDataURL(), bounds: [[latMin, lonMin], [latMin + H * cLat, lonMin + W * cLon]], T, W, H, latMin, lonMin, cLat, cLon };
+}
+
+function isoSummary(net, R, site) {
+  const popTC = [0, 0, 0, 0], popVelo = [0, 0]; let total = 0;
+  net.coms.forEach(c => {
+    total += c[2];
+    const y = Math.floor((c[0] - R.latMin) / R.cLat), x = Math.floor((c[1] - R.lonMin) / R.cLon);
+    if (y >= 0 && y < R.H && x >= 0 && x < R.W) { const t = R.T[y * R.W + x]; BANDS.forEach((b, i) => { if (t <= b) popTC[i] += c[2]; }); }
+    const d = hav(site, [c[0], c[1]]); if (d <= 3400) popVelo[0] += c[2]; if (d <= 6800) popVelo[1] += c[2];
+  });
+  return { popTC, popVelo, total };
+}
+
+function fmtPop(n) { return Math.round(n).toLocaleString("fr-FR").replace(/\u202f|\u00a0/g, " "); }
+
+async function computeIso(site) {
+  gIso.clearLayers(); gRing.clearLayers();
+  const box = $("isoBox"); if (!INDEX) { box.style.display = "none"; return; }
+  box.style.display = "block";
+  L.circle(site, { radius: 3400, color: "#7c3aed", weight: 1.5, dashArray: "5 4", fill: false }).bindTooltip("Vélo, environ 15 min").addTo(gRing);
+  L.circle(site, { radius: 6800, color: "#7c3aed", weight: 1.5, dashArray: "5 4", fill: false }).bindTooltip("Vélo, environ 30 min").addTo(gRing);
+  $("tRing").checked ? gRing.addTo(map) : map.removeLayer(gRing);
+  const regs = regionsAround(site);
+  if (!regs.length || !regs.some(g => g.bus)) { $("isoStatus").textContent = "Zones de temps indisponibles hors des régions préchargées."; $("isoTable").innerHTML = ""; return; }
+  $("isoStatus").textContent = "Calcul des zones de temps…";
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const loaded = await Promise.all(regs.map(g => loadRegion(g.code)));
+    if (!loaded.every(r => r.bus.pat)) { $("isoStatus").textContent = "Les données préchargées ne contiennent pas encore les parcours : relancer build_region.py."; return; }
+    const key = loaded.map(r => r.e.code + r.e.generated).join("|");
+    const net = NETS[key] ||= buildNet(loaded);
+    const DS = isoStops(net, site, $("isoMode").value);
+    const R = isoRaster(net, DS, site);
+    if ($("tIso").checked) L.imageOverlay(R.url, R.bounds, { pane: "iso", interactive: false }).addTo(gIso);
+    const sm = isoSummary(net, R, site);
+    const hex = c => `rgb(${c.join(",")})`;
+    $("isoTable").innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:var(--muted)"><th style="padding:4px 0">Temps</th><th>Habitants (cumul)</th><th>Part</th></tr>` +
+      BANDS.map((b, i) => `<tr style="border-top:1px solid var(--line)"><td style="padding:5px 0"><i style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${hex(BAND_COL[i])};vertical-align:-2px;margin-right:6px"></i>≤ ${b} min</td><td>${fmtPop(sm.popTC[i])}</td><td>${(100 * sm.popTC[i] / sm.total).toFixed(1).replace(".", ",")} %</td></tr>`).join("") +
+      [["Vélo ≤ 15 min", sm.popVelo[0]], ["Vélo ≤ 30 min", sm.popVelo[1]]].map(([l, v]) => `<tr style="border-top:1px solid var(--line)"><td style="padding:5px 0"><i style="display:inline-block;width:14px;height:0;border-top:2px dashed #7c3aed;vertical-align:3px;margin-right:6px"></i>${l}</td><td>${fmtPop(v)}</td><td>${(100 * v / sm.total).toFixed(1).replace(".", ",")} %</td></tr>`).join("") + `</table>` +
+      `<div class="note" style="margin-top:4px">Population de référence : ${fmtPop(sm.total)} habitants (${loaded.map(r => r.e.name).join(", ")}).</div>`;
+    $("isoStatus").textContent = `Arrivée au site en ${$("isoMode").value === "pointe" ? "heure de pointe" : "journée moyenne"}.`;
+  } catch (e) { console.warn(e); $("isoStatus").textContent = "Calcul impossible : " + e.message; }
+}
+$("tIso").onchange = $("tRing").onchange = $("isoMode").onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); };
+
 // ---------- Note ----------
 function scoreAll(bus, velo) {
   const dStop = bus.stops.length ? bus.stops[0].dist : Infinity;
-  const nL = bus.lines.filter(l => [...l.stopIds].some(id => bus.stops.find(s => s.id === id).dist <= R_BUS_SCORE)).length;
+  const byId = new Map(bus.stops.map(s => [s.id, s]));
+  const nL = bus.lines.filter(l => [...l.stopIds].some(id => byId.get(id).dist <= R_BUS_SCORE)).length;
   const hasF = !!bus.hasFreq;
   const sBusProx = hasF ? (dStop <= 150 ? 25 : dStop <= 300 ? 21 : dStop <= 450 ? 16 : dStop <= 600 ? 11 : dStop <= 800 ? 6 : 0)
                         : (dStop <= 150 ? 30 : dStop <= 300 ? 26 : dStop <= 450 ? 20 : dStop <= 600 ? 14 : dStop <= 800 ? 8 : 0);
@@ -363,7 +553,7 @@ function renderScore(s, velo) {
 
 // ---------- Dessin ----------
 function draw(site, label, bus, velo) {
-  [gBus, gVelo, gCircle, gSite].forEach(g => g.clearLayers());
+  [gBus, gVelo, gCircle, gSite, gStops].forEach(g => g.clearLayers());
   lineLayers = {};
   L.circle(site, { radius: R_BUS, color: "#636363", weight: 1, dashArray: "4 4", fillOpacity: 0.02 }).addTo(gCircle);
   L.circle(site, { radius: R_BUS_SCORE, color: "#636363", weight: 1, dashArray: "4 4", fillOpacity: 0.04 }).addTo(gCircle);
@@ -371,7 +561,8 @@ function draw(site, label, bus, velo) {
 
   velo.ways.forEach(w => {
     const st = w.kind === "dedie" ? { color: "#15803d", weight: 4, opacity: .9 } : w.kind === "bande" ? { color: "#65a30d", weight: 3, dashArray: "6 5", opacity: .9 } : { color: "#a3a3a3", weight: 2, dashArray: "2 5", opacity: .8 };
-    L.polyline(w.pts, st).bindTooltip(w.name || { dedie: "Piste cyclable", bande: "Bande cyclable", calme: "Zone apaisée" }[w.kind]).addTo(gVelo);
+    const pl = L.polyline(w.pts, st).addTo(gVelo);
+    if (w.name) pl.bindTooltip(w.name);
   });
 
   bus.lines.forEach(g => {
@@ -379,19 +570,25 @@ function draw(site, label, bus, velo) {
     g.segs.forEach(s => s.length > 1 && L.polyline(s, { color: g.color, weight: 3.5, opacity: .75 }).addTo(grp));
     grp.addTo(gBus); lineLayers[g.key] = { grp, g };
   });
+  const byKey = {}; bus.lines.forEach(l => byKey[l.key] = l);
   bus.stops.forEach(s => {
-    const ls = bus.lines.filter(l => s.lines.has(l.key)).map(l => `<b style="background:${l.color};color:#fff;padding:1px 6px;border-radius:9px">${esc(l.ref)}</b>`).join(" ");
-    L.circleMarker(s.pos, { radius: 5, color: "#fff", weight: 1.5, fillColor: "#1b1b1b", fillOpacity: 1 })
-      .bindPopup(`<b>${esc(s.name)}</b><br>${fmtM(s.dist)} du site${s.n ? "<br>" + s.n + " départs un jour de semaine" : ""}<br>${ls || "Lignes non renseignées"}`).addTo(gBus);
+    L.circleMarker(s.pos, { radius: 4, color: "#fff", weight: 1, fillColor: "#1b1b1b", fillOpacity: 1 })
+      .bindPopup(() => {
+        const ls = [...s.lines].map(k => byKey[k]).filter(Boolean).map(l => `<b style="background:${l.color};color:#fff;padding:1px 6px;border-radius:9px">${esc(l.ref)}</b>`).join(" ");
+        return `<b>${esc(s.name)}</b><br>${fmtM(s.dist)} du site${s.n ? "<br>" + s.n + " départs un jour de semaine" : ""}<br>${ls || "Lignes non renseignées"}`;
+      }).addTo(gStops);
   });
 
   const box = $("linesBox"); box.style.display = "block";
-  $("nLines").textContent = bus.lines.length;
-  $("lines").innerHTML = bus.lines.length ? bus.lines.map(g =>
-    `<span class="chip" data-k="${esc(g.key)}" title="${esc((MODE_LABEL[g.mode] ? MODE_LABEL[g.mode] + " : " : "") + ([...g.names][0] || "") + (g.network ? " (" + g.network + ")" : ""))}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${fmtM(g.dmin)}${g.perDay ? ", " + g.perDay + "/j" : ""}</em></span>`).join("") : '<span class="note">Aucune ligne de bus recensée dans OpenStreetMap à moins de 800 m.</span>';
+  const chip = g => `<span class="chip" data-k="${esc(g.key)}" title="${esc((MODE_LABEL[g.mode] ? MODE_LABEL[g.mode] + " : " : "") + ([...g.names][0] || "") + (g.network ? " (" + g.network + ")" : ""))}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${fmtM(g.dmin)}${g.perDay ? ", " + g.perDay + "/j" : ""}</em></span>`;
+  const nearL = bus.lines.filter(g => g.dmin <= R_BUS), farL = bus.lines.filter(g => g.dmin > R_BUS).sort((x, y) => x.dmin - y.dmin);
+  $("nLines").textContent = nearL.length + (farL.length ? " + " + farL.length + " plus loin" : "");
+  $("lines").innerHTML = (nearL.length ? nearL.map(chip).join("") : '<span class="note">Aucune ligne à moins de 800 m.</span>') +
+    (farL.length ? `<details style="width:100%;margin-top:8px"><summary class="note" style="cursor:pointer">${farL.length} autre(s) ligne(s) entre 800 m et ${fmtM(DISP_BUS)}</summary><div class="lines" style="margin-top:6px">${farL.map(chip).join("")}</div></details>` : "");
   document.querySelectorAll(".chip").forEach(ch => ch.onclick = () => highlight(ch.dataset.k, ch));
 
   map.fitBounds(L.latLng(site).toBounds(R_BUS * 2).pad(0.1));
+  const zq = new URLSearchParams(location.search).get("z"); if (zq) map.setView(site, +zq);
   applyToggles();
 }
 
@@ -402,17 +599,27 @@ function highlight(k, chip) {
   if (on) { chip.classList.add("on"); const L0 = lineLayers[k]; if (L0) { const pts = L0.g.segs.flat(); if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.1)); } }
 }
 
+const STOP_ZOOM = 14;
+function updateStops() {
+  const want = $("tBus").checked && map.getZoom() >= STOP_ZOOM;
+  if (want && !map.hasLayer(gStops)) gStops.addTo(map); else if (!want && map.hasLayer(gStops)) map.removeLayer(gStops);
+}
+map.on("zoomend", updateStops);
 function applyToggles() {
+  updateStops();
   [[gBus, "tBus"], [gVelo, "tVelo"], [gCircle, "tCercle"]].forEach(([g, id]) => {
     const want = $(id).checked;
     if (want && !map.hasLayer(g)) g.addTo(map); else if (!want && map.hasLayer(g)) map.removeLayer(g);
   });
 }
 ["tBus", "tVelo", "tCercle"].forEach(id => $(id).onchange = applyToggles);
+$("dBus").onchange = e => { DISP_BUS = +e.target.value; if (lastSite) analyse(lastSite.lat, lastSite.lon, lastSite.label); };
+$("dVelo").onchange = e => { DISP_VELO = +e.target.value; if (lastSite) analyse(lastSite.lat, lastSite.lon, lastSite.label); };
 
 // ---------- Orchestration ----------
 async function analyse(lat, lon, label) {
   const site = [lat, lon];
+  lastSite = { lat, lon, label };
   const code = pickRegion(lat, lon);
   if (code) {
     try {
@@ -423,6 +630,7 @@ async function analyse(lat, lon, label) {
       renderScore(scoreAll(bus, velo), velo);
       $("dataInfo").textContent = `Données : ${reg.e.name}, extraites le ${new Date(reg.e.generated).toLocaleDateString("fr-FR")} (horaires d'un jour de semaine type).`;
       setStatus(`${bus.stops.length} arrêt(s), ${bus.lines.length} ligne(s), ${velo.ways.filter(w => w.kind !== "calme").length} tronçon(s) cyclable(s).`);
+      computeIso(site);
       return;
     } catch (e) { console.warn(e); setStatus("Données préchargées indisponibles, bascule en direct…"); }
   }
@@ -466,6 +674,7 @@ const leg = L.control({ position: "bottomright" });
 leg.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.innerHTML = '<i style="border-color:#15803d"></i>Piste cyclable<br><i style="border-color:#65a30d;border-top-style:dashed"></i>Bande cyclable<br><i style="border-color:#a3a3a3;border-top-style:dotted"></i>Zone apaisée<br><i style="border-color:#1d4ed8"></i>Ligne de bus'; return d; };
 leg.addTo(map);
 loadIndex().then(() => {
+  (new URLSearchParams(location.search).get("off") || "").split(",").filter(Boolean).forEach(id => { if ($(id)) $(id).checked = false; });
   const q = new URLSearchParams(location.search).get("q");
   if (q) { $("q").value = q; $("f").requestSubmit(); }
 });
