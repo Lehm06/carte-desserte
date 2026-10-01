@@ -1,0 +1,1 @@
+{"regions":[{"code":"93","name":"Provence-Alpes-Côte d'Azur","bbox":[42.92338185478767,4.170335199091758,45.186795227194445,7.775741681764959],"generated":"2026-10-01","bus":"data/93/bus.json","velo":"data/93/velo.json"}],"sources":"Bus : GTFS transport.data.gouv.fr. Velo : Geovelo / OpenStreetMap (ODbL)."}

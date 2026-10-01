@@ -73,6 +73,9 @@
     </form>
     <ul id="suggestions"></ul>
     <div id="status" class="status" role="status"></div>
+    <label class="note" style="display:flex;gap:8px;align-items:center;margin-top:6px">Région des données
+      <select id="regionSel" style="flex:1;padding:6px;border:1px solid #c9c6bd;border-radius:6px;font:inherit"><option value="auto">Détection automatique</option></select></label>
+    <div id="dataInfo" class="note" style="margin-top:4px"></div>
   </div>
 
   <section class="score" id="score" aria-live="polite">
@@ -97,7 +100,7 @@
     </div>
   </section>
 
-  <p class="note warn">Limites : les distances sont à vol d'oiseau, la fréquence de passage des bus n'est pas évaluée (absente d'OpenStreetMap), et les données dépendent de la complétude de la cartographie locale. Une vérification sur le terrain ou auprès de l'autorité organisatrice reste recommandée.</p>
+  <p class="note warn">Limites : les distances sont à vol d'oiseau. Les fréquences viennent des horaires théoriques d'un jour de semaine type (régions préchargées uniquement ; en mode direct, la fréquence n'est pas évaluée). Les données dépendent de la complétude des fichiers publiés par les réseaux et d'OpenStreetMap. Une vérification sur le terrain ou auprès de l'autorité organisatrice reste recommandée.</p>
   <p class="note">Sources : OpenStreetMap (Overpass), Base Adresse Nationale.</p>
 </aside>
 <div id="map"></div>
@@ -105,7 +108,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const R_BUS = 800, R_BUS_SCORE = 500, R_VELO = 1000, R_VELO_LEN = 500;
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const PALETTE = ["#1d4ed8","#c2410c","#7e22ce","#0f766e","#be123c","#a16207","#0369a1","#4d7c0f","#9d174d","#4338ca","#b45309","#047857"];
 
 const map = L.map("map", { zoomControl: true }).setView([46.6, 2.5], 6);
@@ -141,15 +144,19 @@ async function reverse(lat, lon) {
 
 // ---------- Overpass ----------
 async function overpass(query) {
-  let lastErr;
+  const errs = [];
   for (const url of OVERPASS) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 40000);
     try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(query), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      const r = await fetch(url + "?data=" + encodeURIComponent(query), { signal: ctl.signal });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      return (await r.json()).elements;
-    } catch (e) { lastErr = e; }
+      const j = await r.json();
+      if (j.remark && /error|timed out|out of memory/i.test(j.remark) && !(j.elements || []).length) throw new Error(j.remark.slice(0, 80));
+      return j.elements;
+    } catch (e) { errs.push(new URL(url).host + " : " + (e.name === "AbortError" ? "délai dépassé" : e.message)); }
+    finally { clearTimeout(timer); }
   }
-  throw lastErr;
+  throw new Error(errs.join(" ; "));
 }
 
 function busQuery(lat, lon) {
@@ -208,6 +215,10 @@ function processVelo(els, site) {
     const calme = t.highway === "living_street";
     ways.push({ pts, kind: dedie ? "dedie" : calme ? "calme" : "bande", name: t.name || "" });
   });
+  return veloStats(ways, site);
+}
+
+function veloStats(ways, site) {
   let dmin = Infinity, len = 0, lenDedie = 0;
   ways.forEach(w => {
     for (let i = 0; i < w.pts.length; i++) {
@@ -223,18 +234,114 @@ function processVelo(els, site) {
   return { ways, dmin: dreal, len, lenDedie };
 }
 
+// ---------- Données préchargées par région ----------
+let INDEX = null;
+const REG = {};
+
+function decodePoly(s) {
+  const out = []; let i = 0, la = 0, lo = 0;
+  const num = () => { let b, sh = 0, r = 0; do { b = s.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32); return (r & 1) ? ~(r >> 1) : (r >> 1); };
+  while (i < s.length) { la += num(); lo += num(); out.push([la / 1e5, lo / 1e5]); }
+  return out;
+}
+
+async function loadIndex() {
+  try {
+    const r = await fetch("data/index.json", { cache: "no-cache" });
+    if (!r.ok) throw new Error();
+    INDEX = await r.json();
+    const sel = $("regionSel");
+    INDEX.regions.forEach(g => sel.insertAdjacentHTML("beforeend", `<option value="${esc(g.code)}">${esc(g.name)}</option>`));
+    $("dataInfo").textContent = INDEX.regions.length ? `Données préchargées : ${INDEX.regions.map(g => g.name).join(", ")}. Ailleurs, chargement en direct depuis OpenStreetMap.` : "";
+  } catch { INDEX = null; }
+}
+
+function pickRegion(lat, lon) {
+  if (!INDEX) return null;
+  const v = $("regionSel").value;
+  if (v !== "auto") return v;
+  const hits = INDEX.regions.filter(g => lat >= g.bbox[0] && lat <= g.bbox[2] && lon >= g.bbox[1] && lon <= g.bbox[3]);
+  if (!hits.length) return null;
+  hits.sort((a, b) => hav([lat, lon], [(a.bbox[0] + a.bbox[2]) / 2, (a.bbox[1] + a.bbox[3]) / 2]) - hav([lat, lon], [(b.bbox[0] + b.bbox[2]) / 2, (b.bbox[1] + b.bbox[3]) / 2]));
+  return hits[0].code;
+}
+
+async function loadRegion(code) {
+  if (REG[code]) return REG[code];
+  const e = INDEX.regions.find(g => g.code === code);
+  setStatus(`Chargement des données de ${e.name}…`);
+  const [bus, velo] = await Promise.all([e.bus, e.velo].map(u => fetch(u).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })));
+  const ways = [];
+  [["dedie", "dedie"], ["bande", "bande"], ["apaise", "calme"]].forEach(([k, kind]) => velo[k].forEach(s => {
+    const pts = decodePoly(s); let a = 90, b = -90, c = 180, d = -180;
+    pts.forEach(p => { if (p[0] < a) a = p[0]; if (p[0] > b) b = p[0]; if (p[1] < c) c = p[1]; if (p[1] > d) d = p[1]; });
+    ways.push({ pts, kind, name: "", bb: [a, c, b, d] });
+  }));
+  return REG[code] = { e, bus, ways };
+}
+
+const MODE_LABEL = { bus: "Bus", tram: "Tramway", metro: "Métro", train: "Train" };
+
+function localBus(reg, site) {
+  const { routes, stops } = reg.bus;
+  const dlat = R_BUS / 111000, dlon = dlat / Math.cos(site[0] * Math.PI / 180);
+  const near = [];
+  stops.forEach(s => {
+    if (Math.abs(s[0] - site[0]) > dlat || Math.abs(s[1] - site[1]) > dlon) return;
+    const d = hav(site, [s[0], s[1]]); if (d <= R_BUS) near.push({ s, d });
+  });
+  near.sort((a, b) => a.d - b.d);
+  const gk = i => { const r = routes[i]; return r.r + "|" + r.net + "|" + r.m; };
+  const groups = {}, stopsOut = [];
+  let passages500 = 0;
+  near.forEach(({ s, d }, id) => {
+    const keys = new Set();
+    s[5].forEach(([ri, c]) => {
+      const k = gk(ri), r = routes[ri]; keys.add(k);
+      const g = groups[k] ||= { key: k, ref: r.r, network: r.net, mode: r.m, names: new Set(), segs: [], stopIds: new Set(), ri: new Set(), colour: r.c ? "#" + r.c : "", dBest: Infinity, perDay: 0 };
+      g.stopIds.add(id); g.ri.add(ri); if (r.n) g.names.add(r.n);
+      if (d < g.dBest) { g.dBest = d; g.perDay = c; }
+    });
+    if (d <= R_BUS_SCORE) passages500 += s[3];
+    stopsOut.push({ id, pos: [s[0], s[1]], name: s[2], lines: keys, dist: d, n: s[3] });
+  });
+  const dla = (R_BUS + 1500) / 111000, dlo = dla / Math.cos(site[0] * Math.PI / 180);
+  const list = Object.values(groups);
+  list.sort((a, b) => a.ref.localeCompare(b.ref, "fr", { numeric: true }));
+  list.forEach((g, i) => {
+    g.color = /^#[0-9a-f]{6}$/i.test(g.colour) && g.colour.toLowerCase() !== "#ffffff" ? g.colour : PALETTE[i % PALETTE.length];
+    g.dmin = g.dBest;
+    g.ri.forEach(ri => routes[ri].g.forEach(enc => {
+      const pts = decodePoly(enc);
+      if (pts.some(p => Math.abs(p[0] - site[0]) < dla && Math.abs(p[1] - site[1]) < dlo)) g.segs.push(pts);
+    }));
+  });
+  return { stops: stopsOut, lines: list, hasFreq: true, passages500 };
+}
+
+function localVelo(reg, site) {
+  const dla = (R_VELO + 300) / 111000, dlo = dla / Math.cos(site[0] * Math.PI / 180);
+  const ways = reg.ways.filter(w => w.bb[0] < site[0] + dla && w.bb[2] > site[0] - dla && w.bb[1] < site[1] + dlo && w.bb[3] > site[1] - dlo);
+  return veloStats(ways, site);
+}
+
 // ---------- Note ----------
 function scoreAll(bus, velo) {
   const dStop = bus.stops.length ? bus.stops[0].dist : Infinity;
   const nL = bus.lines.filter(l => [...l.stopIds].some(id => bus.stops.find(s => s.id === id).dist <= R_BUS_SCORE)).length;
-  const sBusProx = dStop <= 150 ? 30 : dStop <= 300 ? 26 : dStop <= 450 ? 20 : dStop <= 600 ? 14 : dStop <= 800 ? 8 : 0;
-  const sBusDiv = nL === 0 ? 0 : nL === 1 ? 8 : nL === 2 ? 15 : nL === 3 ? 21 : nL <= 5 ? 26 : 30;
+  const hasF = !!bus.hasFreq;
+  const sBusProx = hasF ? (dStop <= 150 ? 25 : dStop <= 300 ? 21 : dStop <= 450 ? 16 : dStop <= 600 ? 11 : dStop <= 800 ? 6 : 0)
+                        : (dStop <= 150 ? 30 : dStop <= 300 ? 26 : dStop <= 450 ? 20 : dStop <= 600 ? 14 : dStop <= 800 ? 8 : 0);
+  const sBusDiv = hasF ? (nL === 0 ? 0 : nL === 1 ? 5 : nL === 2 ? 9 : nL === 3 ? 12 : nL <= 5 ? 14 : 15)
+                       : (nL === 0 ? 0 : nL === 1 ? 8 : nL === 2 ? 15 : nL === 3 ? 21 : nL <= 5 ? 26 : 30);
+  const p = bus.passages500 || 0;
+  const sBusFreq = !hasF ? 0 : p >= 200 ? 20 : p >= 100 ? 16 : p >= 50 ? 12 : p >= 20 ? 8 : p >= 6 ? 4 : p > 0 ? 2 : 0;
   const dV = velo.dmin;
   const sVProx = dV <= 100 ? 20 : dV <= 250 ? 16 : dV <= 500 ? 10 : dV <= 1000 ? 4 : 0;
   const sVLen = velo.len === 0 ? 0 : velo.len < 300 ? 5 : velo.len < 1000 ? 10 : velo.len < 2500 ? 15 : 20;
-  const total = sBusProx + sBusDiv + sVProx + sVLen;
+  const total = sBusProx + sBusDiv + sBusFreq + sVProx + sVLen;
   const verdict = total >= 75 ? "Très bien desservi" : total >= 55 ? "Bien desservi" : total >= 35 ? "Desserte moyenne" : total >= 15 ? "Desserte faible" : "Très mal desservi";
-  return { total, verdict, dStop, nL, sBusProx, sBusDiv, sVProx, sVLen, dV };
+  return { total, verdict, dStop, nL, sBusProx, sBusDiv, sBusFreq, hasF, p, sVProx, sVLen, dV };
 }
 
 function renderScore(s, velo) {
@@ -245,9 +352,10 @@ function renderScore(s, velo) {
   $("verdict").textContent = s.verdict;
   const c = (a, b) => `<div class="crit"><span>${a}</span><span>${b}</span></div>`;
   $("detail").innerHTML =
-    `<div class="sect"><span>Bus</span><span>${s.sBusProx + s.sBusDiv}/60</span></div>` +
-    c("Arrêt le plus proche : " + (isFinite(s.dStop) ? fmtM(s.dStop) : "aucun dans 800 m"), s.sBusProx + "/30") +
-    c(`Lignes distinctes à moins de 500 m : ${s.nL}`, s.sBusDiv + "/30") +
+    `<div class="sect"><span>Transports en commun</span><span>${s.sBusProx + s.sBusDiv + s.sBusFreq}/60</span></div>` +
+    c("Arrêt le plus proche : " + (isFinite(s.dStop) ? fmtM(s.dStop) : "aucun dans 800 m"), s.sBusProx + (s.hasF ? "/25" : "/30")) +
+    c(`Lignes distinctes à moins de 500 m : ${s.nL}`, s.sBusDiv + (s.hasF ? "/15" : "/30")) +
+    (s.hasF ? c(`Départs un jour de semaine aux arrêts à moins de 500 m : ${s.p}`, s.sBusFreq + "/20") : "") +
     `<div class="sect"><span>Vélo</span><span>${s.sVProx + s.sVLen}/40</span></div>` +
     c("Aménagement cyclable le plus proche : " + (isFinite(s.dV) ? fmtM(s.dV) : "aucun dans 1 km"), s.sVProx + "/20") +
     c(`Linéaire cyclable à moins de 500 m : ${fmtM(velo.len)} (dont ${fmtM(velo.lenDedie)} en site propre)`, s.sVLen + "/20");
@@ -274,17 +382,16 @@ function draw(site, label, bus, velo) {
   bus.stops.forEach(s => {
     const ls = bus.lines.filter(l => s.lines.has(l.key)).map(l => `<b style="background:${l.color};color:#fff;padding:1px 6px;border-radius:9px">${esc(l.ref)}</b>`).join(" ");
     L.circleMarker(s.pos, { radius: 5, color: "#fff", weight: 1.5, fillColor: "#1b1b1b", fillOpacity: 1 })
-      .bindPopup(`<b>${esc(s.name)}</b><br>${fmtM(s.dist)} du site<br>${ls || "Lignes non renseignées"}`).addTo(gBus);
+      .bindPopup(`<b>${esc(s.name)}</b><br>${fmtM(s.dist)} du site${s.n ? "<br>" + s.n + " départs un jour de semaine" : ""}<br>${ls || "Lignes non renseignées"}`).addTo(gBus);
   });
 
   const box = $("linesBox"); box.style.display = "block";
   $("nLines").textContent = bus.lines.length;
   $("lines").innerHTML = bus.lines.length ? bus.lines.map(g =>
-    `<span class="chip" data-k="${esc(g.key)}" title="${esc([...g.names][0] || "")}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${fmtM(g.dmin)}</em></span>`).join("") : '<span class="note">Aucune ligne de bus recensée dans OpenStreetMap à moins de 800 m.</span>';
+    `<span class="chip" data-k="${esc(g.key)}" title="${esc((MODE_LABEL[g.mode] ? MODE_LABEL[g.mode] + " : " : "") + ([...g.names][0] || "") + (g.network ? " (" + g.network + ")" : ""))}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${fmtM(g.dmin)}${g.perDay ? ", " + g.perDay + "/j" : ""}</em></span>`).join("") : '<span class="note">Aucune ligne de bus recensée dans OpenStreetMap à moins de 800 m.</span>';
   document.querySelectorAll(".chip").forEach(ch => ch.onclick = () => highlight(ch.dataset.k, ch));
 
-  const all = L.featureGroup([L.circle(site, { radius: R_BUS })]);
-  map.fitBounds(all.getBounds().pad(0.1));
+  map.fitBounds(L.latLng(site).toBounds(R_BUS * 2).pad(0.1));
   applyToggles();
 }
 
@@ -306,17 +413,35 @@ function applyToggles() {
 // ---------- Orchestration ----------
 async function analyse(lat, lon, label) {
   const site = [lat, lon];
+  const code = pickRegion(lat, lon);
+  if (code) {
+    try {
+      const reg = await loadRegion(code);
+      const bus = localBus(reg, site), velo = localVelo(reg, site);
+      draw(site, label, bus, velo);
+      $("q").value = label;
+      renderScore(scoreAll(bus, velo), velo);
+      $("dataInfo").textContent = `Données : ${reg.e.name}, extraites le ${new Date(reg.e.generated).toLocaleDateString("fr-FR")} (horaires d'un jour de semaine type).`;
+      setStatus(`${bus.stops.length} arrêt(s), ${bus.lines.length} ligne(s), ${velo.ways.filter(w => w.kind !== "calme").length} tronçon(s) cyclable(s).`);
+      return;
+    } catch (e) { console.warn(e); setStatus("Données préchargées indisponibles, bascule en direct…"); }
+  }
   setStatus("Chargement des lignes de bus et des pistes cyclables…");
-  try {
-    const [busEls, veloEls] = await Promise.all([overpass(busQuery(lat, lon)), overpass(veloQuery(lat, lon))]);
-    const bus = processBus(busEls, site), velo = processVelo(veloEls, site);
-    const s = scoreAll(bus, velo);
-    draw(site, label, bus, velo);
-    renderScore(s, velo);
-    $("q").value = label;
+  const [rb, rv] = await Promise.allSettled([overpass(busQuery(lat, lon)), overpass(veloQuery(lat, lon))]);
+  if (rb.status === "rejected" && rv.status === "rejected") {
+    setStatus("Données indisponibles. Bus : " + rb.reason.message + " | Vélo : " + rv.reason.message + ". Réessayer dans une minute.", true);
+    return;
+  }
+  const bus = rb.status === "fulfilled" ? processBus(rb.value, site) : { stops: [], lines: [] };
+  const velo = rv.status === "fulfilled" ? processVelo(rv.value, site) : { ways: [], dmin: Infinity, len: 0, lenDedie: 0 };
+  draw(site, label, bus, velo);
+  $("q").value = label;
+  if (rb.status === "fulfilled" && rv.status === "fulfilled") {
+    renderScore(scoreAll(bus, velo), velo);
     setStatus(`${bus.stops.length} arrêt(s), ${bus.lines.length} ligne(s), ${velo.ways.filter(w => w.kind !== "calme").length} tronçon(s) cyclable(s).`);
-  } catch (e) {
-    setStatus("Les données OpenStreetMap n'ont pas pu être chargées (" + e.message + "). Réessayer dans un instant.", true);
+  } else {
+    $("score").style.display = "none";
+    setStatus("Note non calculée : " + (rb.status === "rejected" ? "bus indisponibles (" + rb.reason.message + ")" : "pistes cyclables indisponibles (" + rv.reason.message + ")") + ". Cliquer de nouveau sur Analyser.", true);
   }
 }
 
@@ -328,7 +453,7 @@ $("f").addEventListener("submit", async ev => {
   try {
     const res = await geocode(q);
     if (!res.length) return setStatus("Adresse introuvable.", true);
-    if (res.length === 1) return analyse(res[0].lat, res[0].lon, res[0].label);
+    if (res.length === 1 || new URLSearchParams(location.search).has("auto")) return analyse(res[0].lat, res[0].lon, res[0].label);
     const ul = $("suggestions"); ul.innerHTML = res.map((r, i) => `<li data-i="${i}">${esc(r.label)}</li>`).join(""); ul.style.display = "block";
     setStatus("Plusieurs adresses possibles, choisir la bonne.");
     ul.onclick = e => { const li = e.target.closest("li"); if (!li) return; const r = res[li.dataset.i]; ul.style.display = "none"; analyse(r.lat, r.lon, r.label); };
@@ -340,6 +465,10 @@ map.on("click", async e => { const label = await reverse(e.latlng.lat, e.latlng.
 const leg = L.control({ position: "bottomright" });
 leg.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.innerHTML = '<i style="border-color:#15803d"></i>Piste cyclable<br><i style="border-color:#65a30d;border-top-style:dashed"></i>Bande cyclable<br><i style="border-color:#a3a3a3;border-top-style:dotted"></i>Zone apaisée<br><i style="border-color:#1d4ed8"></i>Ligne de bus'; return d; };
 leg.addTo(map);
+loadIndex().then(() => {
+  const q = new URLSearchParams(location.search).get("q");
+  if (q) { $("q").value = q; $("f").requestSubmit(); }
+});
 </script>
 </body>
 </html>
