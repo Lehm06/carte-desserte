@@ -71,6 +71,41 @@
   .sverd { font-size: 12px; font-weight: 600; }
   .srows { margin-top: 8px; }
   .srows .crit { font-size: 12px; }
+  .tabs { display: flex; gap: 6px; align-items: center; }
+  .tab { font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; padding: 6px 14px; border-radius: 999px; border: 1px solid #c9c6bd; background: #fff; color: var(--ink); }
+  .tab.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  #methodView { position: fixed; inset: 0; z-index: 5000; background: var(--bg); overflow: auto; --warn-bg: #fff7e6; --warn-line: #e0b252; --soft: #f1efe9; font-size: 16px; line-height: 1.6; }
+  #methodView[hidden] { display: none; }
+  #methodView .mbar { position: sticky; top: 0; z-index: 3; background: var(--bg); padding: 12px 20px; border-bottom: 1px solid var(--line); }
+  #methodView .wrap { max-width: 920px; margin: 0 auto; padding: 24px 20px 64px; }
+  #methodView header h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -.02em; }
+  #methodView header p { margin: 0; color: var(--muted); }
+  #methodView nav { margin: 22px 0; padding: 16px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  #methodView nav b { display: block; margin-bottom: 6px; }
+  #methodView nav ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  #methodView nav a { color: var(--accent); text-decoration: none; }
+  #methodView nav a:hover { text-decoration: underline; }
+  #methodView section { margin-top: 34px; scroll-margin-top: 70px; }
+  #methodView h2 { font-size: 22px; text-transform: none; letter-spacing: -.01em; color: var(--ink); font-weight: 700; margin: 0 0 10px; padding-top: 6px; border-top: 3px solid var(--accent); }
+  #methodView h3 { font-size: 17px; margin: 22px 0 6px; }
+  #methodView p, #methodView li { max-width: 74ch; }
+  #methodView .box { background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 12px; padding: 14px 18px; margin: 14px 0; }
+  #methodView .box.ok { background: var(--panel); border-color: var(--line); }
+  #methodView .box p { margin: 6px 0; }
+  #methodView .tablewrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  #methodView table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  #methodView th, #methodView td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  #methodView th { background: var(--soft); font-weight: 600; }
+  #methodView tr:last-child td { border-bottom: 0; }
+  #methodView td.num, #methodView th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #methodView .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); white-space: nowrap; }
+  #methodView .tag.m { border-color: var(--accent); color: var(--accent); }
+  #methodView .tag.n { border-color: var(--warn-line); }
+  #methodView .note { color: var(--muted); font-size: 14px; }
+  #methodView code { background: var(--soft); padding: 1px 6px; border-radius: 5px; font-size: 90%; }
+  #methodView footer { margin-top: 44px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+  @media (max-width: 640px) { #methodView nav ol { columns: 1; } }
+  .cLabel { font-size: 11px; font-weight: 600; color: #444; background: rgba(255,255,255,.85); padding: 0 5px; border-radius: 4px; white-space: nowrap; }
   .etabIcon { width: 28px; height: 28px; border-radius: 6px; background: #7c3aed; color: #fff; font-weight: 700; display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); }
   @media (max-width: 800px) {
     body { grid-template-columns: 1fr; grid-template-rows: 55vh 45vh; }
@@ -81,6 +116,7 @@
 </head>
 <body>
 <aside>
+  <div class="tabs"><button class="tab on" type="button" data-v="map">Analyse de site</button><button class="tab" type="button" data-v="method">Méthodologie</button></div>
   <div>
     <h1>Desserte d'un site</h1>
     <p class="sub">Lignes de bus, pistes cyclables et note de desserte autour d'une adresse.</p>
@@ -116,8 +152,8 @@
   <section id="isoBox" style="display:none">
     <h2>Zone d'accès au site</h2>
     <div class="opts">
-      <label><input type="checkbox" id="tIso" checked> Afficher les zones de temps (transports en commun)</label>
-      <label><input type="checkbox" id="tRing"> Afficher les anneaux vélo (15 et 30 min)</label>
+      <label><input type="checkbox" id="tIso" checked> Afficher les zones de temps</label>
+      <label>Zones calculées pour <select id="isoWhat"><option value="tc" selected>Transports en commun</option><option value="bus">Bus seulement</option><option value="bike">Vélo (15 km/h)</option><option value="ebike">Vélo électrique (20 km/h)</option></select></label>
       <div style="display:flex;flex-wrap:wrap;gap:4px 14px">Modes pris en compte :
         <label><input type="checkbox" id="mBus" checked> Bus</label>
         <label><input type="checkbox" id="mTram" checked> Tramway</label>
@@ -181,14 +217,244 @@
       <label><input type="checkbox" id="tVelo" checked> Aménagements cyclables</label>
       <label>Lignes de bus jusqu'à <select id="dBus"><option value="2000">2 km</option><option value="5000">5 km</option><option value="10000">10 km</option><option value="20000">20 km</option><option value="40000" selected>40 km</option></select></label>
       <label>Pistes cyclables jusqu'à <select id="dVelo"><option value="1000">1 km</option><option value="2000">2 km</option><option value="5000">5 km</option><option value="10000" selected>10 km</option></select></label>
-      <label><input type="checkbox" id="tCercle" checked> Cercles de 500 m et 800 m</label>
+      <label><input type="checkbox" id="tCercle" checked> Cercles de 5 km et 10 km</label>
     </div>
   </section>
 
-  <p class="note warn">Limites : les distances sont à vol d'oiseau. Les fréquences viennent des horaires théoriques d'un jour de semaine type (régions préchargées uniquement ; en mode direct, la fréquence n'est pas évaluée). Les données dépendent de la complétude des fichiers publiés par les réseaux et d'OpenStreetMap. Une vérification sur le terrain ou auprès de l'autorité organisatrice reste recommandée.</p>
+  <p class="note warn"><b>Estimations à titre indicatif.</b> Les temps et les scores sont calculés à partir de données ouvertes de tiers (horaires théoriques d'un mardi type, cartographie collaborative) et d'hypothèses de modèle : ils donnent un ordre de grandeur (de l'ordre de ±20 % sur les temps en transports en commun, davantage en voiture) et ne remplacent ni une vérification sur le terrain ni les informations officielles des réseaux. <a href="#methodologie" id="goMethod">Méthodologie, limites et marges d'erreur</a>.</p>
   <p class="note">Sources : OpenStreetMap (Overpass), Base Adresse Nationale.</p>
 </aside>
 <div id="map"></div>
+
+<div id="methodView" hidden>
+  <div class="mbar"><div class="tabs"><button class="tab" type="button" data-v="map">Analyse de site</button><button class="tab on" type="button" data-v="method">Méthodologie</button></div></div>
+  <div class="wrap">
+
+<header>
+  <h1>Méthodologie, limites et marges d'erreur</h1>
+  <p>Guide de lecture de l'outil d'analyse de la desserte d'un site. Version du 2 octobre 2026.</p>
+</header>
+
+<nav aria-label="Sommaire" class="mnav">
+  <b>Sommaire</b>
+  <ol>
+    <li><a href="#usage">Ce que l'outil fait, et ne fait pas</a></li>
+    <li><a href="#avertissements">Avertissements</a></li>
+    <li><a href="#sources">Sources de données et dates</a></li>
+    <li><a href="#methode">Méthode par indicateur</a></li>
+    <li><a href="#erreurs">Marges d'erreur</a></li>
+    <li><a href="#lecture">Comment lire et présenter un résultat</a></li>
+    <li><a href="#donnees-perso">Données personnelles</a></li>
+    <li><a href="#maj">Mise à jour et reproductibilité</a></li>
+    <li><a href="#licences">Licences et crédits</a></li>
+  </ol>
+</nav>
+
+<section id="usage">
+  <h2>1. Ce que l'outil fait, et ne fait pas</h2>
+  <p>L'outil estime dans quelle mesure un lieu de travail est accessible aux personnes qui s'y rendent&nbsp;: en transports en commun, à vélo, à pied, en voiture ou en covoiturage, avec des repères sur la recharge de véhicules électriques. Il fournit des <b>ordres de grandeur comparables d'un site à l'autre</b>, pas des temps de trajet garantis.</p>
+  <p>Il ne remplace pas&nbsp;:</p>
+  <ul>
+    <li>un diagnostic de mobilité réalisé par un professionnel ;</li>
+    <li>les informations officielles des autorités organisatrices de la mobilité (horaires, perturbations, tarifs) ;</li>
+    <li>une vérification sur le terrain (cheminements piétons, sécurité des itinéraires cyclables, accessibilité des arrêts).</li>
+  </ul>
+  <p>Il ne tient compte ni des retards et de la saturation des véhicules, ni de la circulation, ni du relief, ni de la météo, ni des contraintes individuelles (mobilité réduite, charge à transporter, horaires décalés).</p>
+</section>
+
+<section id="avertissements">
+  <h2>2. Avertissements</h2>
+  <div class="box">
+    <p><b>Valeur indicative.</b> Les résultats sont des estimations calculées à partir de données ouvertes produites par des tiers. Ils sont fournis à titre indicatif, sans garantie d'exactitude, d'exhaustivité ni d'actualité, et n'ont aucune valeur contractuelle.</p>
+    <p><b>Aide à la décision, pas décision.</b> Ils ne doivent pas être utilisés seuls pour engager un choix d'implantation, un engagement vis-à-vis de salariés ou de tiers, ou une communication externe sans vérification complémentaire.</p>
+    <p><b>Responsabilité.</b> L'éditeur de l'outil décline toute responsabilité quant aux décisions prises sur la base de ces estimations et quant aux conséquences d'éventuelles erreurs, omissions ou indisponibilités des données et des services tiers utilisés.</p>
+    <p><b>Disponibilité.</b> Le calcul des temps par la route repose sur un service public gratuit, sans garantie de disponibilité. En cas d'indisponibilité, l'outil bascule sur des estimations à vol d'oiseau, signalées par le symbole «&nbsp;~&nbsp;».</p>
+  </div>
+</section>
+
+<section id="sources">
+  <h2>3. Sources de données et dates</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Donnée</th><th>Source</th><th>Contenu embarqué</th><th>Date d'extraction</th></tr>
+    <tr><td>Horaires et lignes de transport en commun</td><td>Fichiers GTFS publiés sur transport.data.gouv.fr par les réseaux (bus, tramway, métro, RER, TER)</td><td>Environ 35&nbsp;700 lignes et 68&nbsp;100 parcours (plus de 300&nbsp;000 arrêts, dont des doublons dans les zones de recouvrement entre régions)</td><td>1er octobre 2026</td></tr>
+    <tr><td>Aménagements cyclables</td><td>«&nbsp;Aménagements cyclables France métropolitaine&nbsp;» (Geovelo, issu d'OpenStreetMap)</td><td>Environ 383&nbsp;000 tronçons (pistes, bandes, zones apaisées)</td><td>1er octobre 2026</td></tr>
+    <tr><td>Lieux de covoiturage</td><td>Base Nationale des Lieux de Covoiturage</td><td>11&nbsp;076 lieux ouverts</td><td>2 octobre 2026</td></tr>
+    <tr><td>Vélos en libre-service</td><td>Flux GBFS référencés sur transport.data.gouv.fr</td><td>5&nbsp;322 stations dans 69 réseaux (hors opérateurs sans station)</td><td>2 octobre 2026</td></tr>
+    <tr><td>Bornes de recharge</td><td>Base nationale des IRVE (data.gouv.fr)</td><td>48&nbsp;599 stations, 217&nbsp;468 points de charge</td><td>2 octobre 2026</td></tr>
+    <tr><td>Population et centres de communes</td><td>API Découpage administratif (geo.api.gouv.fr)</td><td>Population de chaque commune, position de son centre</td><td>Interrogée à la construction des données</td></tr>
+    <tr><td>Facteurs d'émission de gaz à effet de serre</td><td>ADEME, Base Carbone, consultée via le catalogue Ecodex</td><td>Une dizaine de facteurs (voiture, covoiturage, bus, tramway, métro, RER, TER, vélo électrique)</td><td>2 octobre 2026</td></tr>
+    <tr><td>Localisation des adresses</td><td>Base Adresse Nationale (api-adresse.data.gouv.fr)</td><td>Interrogée en direct à chaque saisie</td><td>En direct</td></tr>
+    <tr><td>Itinéraires vélo, pied, voiture</td><td>Service Valhalla public (valhalla1.openstreetmap.de), données OpenStreetMap</td><td>Interrogé en direct</td><td>En direct</td></tr>
+    <tr><td>Fonds de carte</td><td>OpenFreeMap, OpenStreetMap, Plan IGN (au choix)</td><td>Tuiles chargées en direct</td><td>En direct</td></tr>
+  </table></div>
+  <p class="note">Les données de transport en commun sont figées à la date d'extraction&nbsp;: les horaires évoluent à chaque changement de service et les réseaux modifient régulièrement leurs lignes. Les couches de covoiturage, de libre-service et de recharge indiquent la date de mise à jour de chaque lieu lorsque la source la fournit.</p>
+</section>
+
+<section id="methode">
+  <h2>4. Méthode par indicateur</h2>
+
+  <h3>4.1 Zones de temps en transports en commun</h3>
+  <p>Pour chaque point de la carte, l'outil estime le temps de porte à porte pour arriver au site. Le calcul part du site et remonte les réseaux (recherche inverse), avec les composantes suivantes&nbsp;:</p>
+  <ul>
+    <li><b>Marche</b> jusqu'à l'arrêt&nbsp;: distance à vol d'oiseau multipliée par un coefficient de détour de 1,3, à 4,5&nbsp;km/h, dans la limite de 12&nbsp;minutes de marche.</li>
+    <li><b>Attente</b>&nbsp;: la moitié de l'intervalle entre deux passages, plus 1&nbsp;minute. L'intervalle est déduit du nombre de départs de la ligne à l'arrêt, un mardi type, en heure de pointe (7&nbsp;h à 9&nbsp;h et 17&nbsp;h à 19&nbsp;h) ou sur la journée selon le choix de l'utilisateur, plafonné à 90&nbsp;minutes.</li>
+    <li><b>Trajet</b>&nbsp;: durée médiane entre arrêts observée dans les horaires théoriques, sur le parcours le plus fréquent de chaque ligne (deux parcours maximum par ligne).</li>
+    <li><b>Correspondances</b>&nbsp;: marche jusqu'à 250&nbsp;m entre arrêts, plus 1&nbsp;minute, avec une nouvelle attente à chaque montée.</li>
+    <li><b>Jour de référence</b>&nbsp;: le mardi le plus chargé parmi les quatre suivants, par réseau. Les réseaux sans service ces jours-là (saisonniers, scolaires, périmés) sont ignorés.</li>
+  </ul>
+  <p>Les zones affichées (15, 30, 45 et 60&nbsp;minutes ou moins) sont les contours de cette grille de temps, calculée par cellules de 250&nbsp;m. Le temps n'est pas calculé au-delà d'environ 1&nbsp;h&nbsp;15.</p>
+
+  <h3>4.2 Temps à vélo, à pied et en voiture</h3>
+  <p>Les temps sont calculés sur le réseau routier et cyclable par un service d'itinéraires public, avec les hypothèses suivantes&nbsp;:</p>
+  <ul>
+    <li>vélo&nbsp;: 15&nbsp;km/h en moyenne ; vélo électrique&nbsp;: 20&nbsp;km/h ; marche&nbsp;: 4,5&nbsp;km/h ;</li>
+    <li>voiture&nbsp;: vitesses du réseau routier, sans embouteillage ni recherche de stationnement ;</li>
+    <li>relief et météo non pris en compte.</li>
+  </ul>
+  <p>Les zones de temps à vélo sont les isochrones du même service. Si le service ne répond pas, l'outil affiche des zones circulaires estimées à vol d'oiseau, et le signale.</p>
+
+  <h3>4.3 Scores par mode (sur 100)</h3>
+  <p>Quatre scores indépendants. Les seuils ci-dessous sont des <b>conventions de l'outil</b>, choisies pour distinguer des situations contrastées, et non des normes réglementaires. Le détail de chaque score est visible dans l'outil en cliquant dessus.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Score</th><th>Critères et points maximum</th></tr>
+    <tr><td>Transports en commun</td><td>Arrêt le plus proche (25), lignes distinctes à moins de 500&nbsp;m (15), départs un jour de semaine aux arrêts à moins de 500&nbsp;m (20). Total ramené à 100.</td></tr>
+    <tr><td>Vélo</td><td>Aménagement cyclable le plus proche (30), linéaire cyclable à moins de 500&nbsp;m (30), station de vélos en libre-service la plus proche (25), nombre de stations à moins de 1&nbsp;km (15).</td></tr>
+    <tr><td>Covoiturage</td><td>Aire la plus proche (45), nombre d'aires à moins de 10&nbsp;km (25), places déclarées à moins de 10&nbsp;km (20), arrêts d'auto-stop à moins de 3&nbsp;km (10).</td></tr>
+    <tr><td>Recharge de véhicules</td><td>Station publique la plus proche (30), stations à moins de 2&nbsp;km (25), recharge rapide de 50&nbsp;kW et plus la plus proche (25), points de charge à moins de 2&nbsp;km (20). Les stations à accès réservé sont exclues.</td></tr>
+  </table></div>
+  <p>Les libellés sont&nbsp;: très bon (75 et plus), bon (55 à 74), moyen (35 à 54), faible (15 à 34), très faible (moins de 15). Les distances des scores sont à vol d'oiseau. Les rayons de calcul sont fixes et ne dépendent pas du rayon d'affichage.</p>
+
+  <h3>4.4 Population dans les zones</h3>
+  <p>Chaque commune est représentée par un point (son centre) auquel est attribuée sa population entière. Elle est comptée dans la zone qui contient ce point. C'est une approximation grossière pour les communes étendues ou très peuplées (voir la section 5).</p>
+
+  <h3>4.5 Domiciles des collaborateurs</h3>
+  <p>Les villes, codes postaux ou adresses saisis sont localisés par la Base Adresse Nationale, avec une priorité au code postal saisi. Par défaut, les points sont regroupés par commune et placés à son centre. Pour chaque lieu, l'outil affiche le temps en transports en commun (lu dans la grille de temps), et les temps à vélo, en vélo électrique et en voiture calculés par la route. La synthèse donne la part des personnes dans chaque tranche de temps, pondérée par le nombre de personnes saisi.</p>
+
+  <h3>4.6 Couches d'information</h3>
+  <p>Les aires de covoiturage, stations de libre-service et bornes de recharge sont affichées telles que déclarées par leurs producteurs. Aucun contrôle de présence, de disponibilité ou de fonctionnement n'est effectué, sauf l'affichage de la disponibilité en direct de certaines stations de libre-service lorsque le réseau l'autorise.</p>
+
+  <h3>4.7 Émissions de gaz à effet de serre d'un trajet</h3>
+  <p>Au clic sur la carte (site verrouillé), l'outil estime les émissions de gaz à effet de serre d'un trajet aller simple jusqu'au site pour plusieurs modes, et leur équivalent annuel. La formule est&nbsp;: <code>émissions = distance × facteur d'émission</code>.</p>
+  <ul>
+    <li><b>Distance.</b> Pour les modes motorisés (voiture, covoiturage, bus, tramway, métro, train), la distance routière du trajet en voiture est utilisée comme approximation commune&nbsp;: l'outil ne calcule pas le tracé réel d'un trajet en transports en commun. Pour le vélo électrique, c'est la distance du trajet à vélo.</li>
+    <li><b>Occupation.</b> La voiture est comptée avec un seul occupant ; le covoiturage avec deux personnes (émissions du véhicule divisées par deux).</li>
+    <li><b>Annualisation.</b> Deux trajets par jour (aller et retour), sur 220 jours travaillés par an. C'est une convention, à adapter à la situation réelle.</li>
+    <li><b>Choix du facteur du bus.</b> Il dépend de la taille de l'agglomération. L'outil retient la tranche correspondant à la population de la commune la plus proche du site, qui n'est qu'une approximation de la taille de l'agglomération.</li>
+    <li><b>Choix du train.</b> RER et Transilien si le site est en Île-de-France, TER ailleurs.</li>
+    <li><b>Vélo musculaire et marche.</b> Aucun facteur n'est retenu&nbsp;: les émissions sont affichées à zéro, hors fabrication du vélo et alimentation.</li>
+  </ul>
+  <div class="tablewrap"><table>
+    <tr><th>Mode</th><th class="num">Facteur retenu</th><th>Unité</th><th>Année</th><th>Intitulé dans la Base Carbone (ADEME)</th></tr>
+    <tr><td>Voiture thermique, un occupant</td><td class="num">0,249</td><td>kgCO<sub>2</sub>e par km</td><td>2023</td><td>Voiture, motorisation moyenne</td></tr>
+    <tr><td>Covoiturage à deux</td><td class="num">0,1245</td><td>kgCO<sub>2</sub>e par km et par personne</td><td>2023</td><td>Calculé&nbsp;: facteur de la voiture divisé par 2</td></tr>
+    <tr><td>Voiture électrique</td><td class="num">0,103</td><td>kgCO<sub>2</sub>e par km</td><td>2020</td><td>Voiture particulière, cœur de gamme, véhicule compact électrique</td></tr>
+    <tr><td>Bus</td><td class="num">0,202 ; 0,147 ; 0,151</td><td>kgCO<sub>2</sub>e par passager.km</td><td>2021</td><td>Autobus moyen, agglomération de moins de 100 000 habitants ; de 100 000 à 250 000 ; de plus de 250 000</td></tr>
+    <tr><td>Tramway, métro</td><td class="num">0,00444</td><td>kgCO<sub>2</sub>e par passager.km</td><td>2022</td><td>Métro (Île-de-France) ; le tramway est à 0,00428. Seules valeurs disponibles, appliquées à toute la France</td></tr>
+    <tr><td>RER, Transilien</td><td class="num">0,00978</td><td>kgCO<sub>2</sub>e par passager.km</td><td>2022</td><td>RER et Transilien (Île-de-France)</td></tr>
+    <tr><td>TER</td><td class="num">0,0277</td><td>kgCO<sub>2</sub>e par passager.km</td><td>2022</td><td>TER, traction moyenne</td></tr>
+    <tr><td>Vélo à assistance électrique</td><td class="num">0,011</td><td>kgCO<sub>2</sub>e par km</td><td>2020</td><td>Vélo à assistance électrique</td></tr>
+    <tr><td>Vélo, marche</td><td class="num">0</td><td>sans objet</td><td>sans objet</td><td>Aucun facteur retenu</td></tr>
+  </table></div>
+  <p class="note">Tous les facteurs retenus incluent l'amont de l'énergie, la combustion ou la consommation d'électricité, et la fabrication du véhicule (périmètre «&nbsp;amont, énergie, combustion, carburant, fabrication&nbsp;» de la Base Carbone), à l'exception du vélo et de la marche. Ils ont été consultés dans le catalogue Ecodex le 2 octobre 2026. Les valeurs peuvent être révisées par l'ADEME&nbsp;: à contrôler à chaque mise à jour.</p>
+</section>
+
+<section id="erreurs">
+  <h2>5. Marges d'erreur</h2>
+  <div class="box ok">
+    <p><b>Lecture.</b> Les chiffres de ce tableau proviennent de mesures réalisées sur les données de l'outil (analyses de sensibilité et comparaisons entre deux moteurs d'itinéraires). Ils mesurent <b>l'effet des hypothèses du modèle</b>, pas l'écart à la réalité&nbsp;: aucune comparaison avec des trajets réellement effectués n'a été conduite à ce stade. Un écart constaté entre deux hypothèses plausibles est un minimum d'incertitude, pas un maximum.</p>
+  </div>
+
+  <h3>5.1 Temps en transports en commun (sensibilité aux hypothèses)</h3>
+  <p>Méthode&nbsp;: le calcul a été rejoué en changeant une hypothèse à la fois, sur trois agglomérations de taille différente (Nice, Paris, Rennes). Les écarts portent sur la durée médiane des arrêts atteignables en moins d'une heure, et sur le nombre d'arrêts atteignables en 30, 45 et 60&nbsp;minutes (indicateur de l'étendue des zones).</p>
+  <div class="tablewrap"><table>
+    <tr><th>Hypothèse modifiée</th><th class="num">Effet sur les durées (médiane)</th><th class="num">Effet sur l'étendue des zones (arrêts atteignables)</th></tr>
+    <tr><td>Marche plus lente (3,6&nbsp;km/h au lieu de 4,5)</td><td class="num">+5&nbsp;%</td><td class="num">−2 à −14&nbsp;%</td></tr>
+    <tr><td>Marche plus rapide (5,4&nbsp;km/h)</td><td class="num">−3 à −4&nbsp;%</td><td class="num">+1 à +13&nbsp;%</td></tr>
+    <tr><td>Détour de marche de 1,15 au lieu de 1,3</td><td class="num">−2 à −3&nbsp;%</td><td class="num">+1 à +9&nbsp;%</td></tr>
+    <tr><td>Détour de marche de 1,5</td><td class="num">+3&nbsp;%</td><td class="num">−2 à −9&nbsp;%</td></tr>
+    <tr><td>Attente réduite à un quart de l'intervalle (au lieu de la moitié)</td><td class="num">−6 à −12&nbsp;%</td><td class="num">+10 à +33&nbsp;%</td></tr>
+    <tr><td>Attente égale à l'intervalle complet</td><td class="num">+11 à +20&nbsp;%</td><td class="num">−16 à −31&nbsp;%</td></tr>
+    <tr><td>Temps de trajet des véhicules majorés de 10&nbsp;%</td><td class="num">+4 à +6&nbsp;%</td><td class="num">−4 à −11&nbsp;%</td></tr>
+    <tr><td>Fréquences d'une journée moyenne au lieu de l'heure de pointe</td><td class="num">+1 à +6&nbsp;%</td><td class="num">−2 à −13&nbsp;%</td></tr>
+  </table></div>
+  <p><b>Ce qu'il faut retenir&nbsp;:</b> l'hypothèse la plus influente est celle de l'attente. En cumulant les écarts maximaux mesurés (hypothèse prudente, rarement atteinte en pratique), la durée d'un trajet en transports en commun peut varier d'environ <b>−20&nbsp;% à +35&nbsp;%</b> autour de la valeur affichée. L'étendue d'une zone de temps varie d'environ <b>±10&nbsp;%</b> selon les hypothèses de marche, et jusqu'à <b>±30&nbsp;%</b> selon l'hypothèse d'attente. Ces ordres de grandeur ne couvrent pas les retards, annulations, ruptures de correspondance ni la saturation, qui n'ont pas été mesurés.</p>
+
+  <h3>5.2 Temps par la route (vélo, voiture) et distances</h3>
+  <p>Méthode&nbsp;: 60 trajets tirés au hasard (12 autour de chacun de 5 sites&nbsp;: Nice, Lyon, Paris, Bordeaux, Rennes), entre 2 et 25&nbsp;km du site. Chaque trajet a été calculé par deux moteurs d'itinéraires indépendants fondés sur les mêmes données de voirie.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Indicateur</th><th class="num">Vélo</th><th class="num">Voiture</th></tr>
+    <tr><td>Rapport distance par la route / distance à vol d'oiseau (médiane ; 10<sup>e</sup> à 90<sup>e</sup> centile)</td><td class="num">1,25 ; 1,14 à 1,46</td><td class="num">1,45 ; 1,14 à 1,99</td></tr>
+    <tr><td>Écart de durée entre les deux moteurs (écart absolu médian)</td><td class="num">12&nbsp;%</td><td class="num">34&nbsp;%</td></tr>
+    <tr><td>Écart de durée entre les deux moteurs (10<sup>e</sup> à 90<sup>e</sup> centile)</td><td class="num">−23&nbsp;% à +24&nbsp;%</td><td class="num">+3&nbsp;% à +62&nbsp;%</td></tr>
+    <tr><td>Écart de distance entre les deux moteurs (écart absolu médian)</td><td class="num">4&nbsp;%</td><td class="num">7&nbsp;%</td></tr>
+    <tr><td>Estimation à vol d'oiseau de l'ancienne version, comparée à la route (médiane ; 10<sup>e</sup> à 90<sup>e</sup> centile)</td><td class="num">−10&nbsp;% ; −24&nbsp;% à +1&nbsp;%</td><td class="num">−29&nbsp;% ; −49&nbsp;% à +8&nbsp;%</td></tr>
+  </table></div>
+  <p><b>Ce qu'il faut retenir&nbsp;:</b> les distances par la route sont stables d'un moteur à l'autre (de l'ordre de 4 à 7&nbsp;%). Les durées à vélo varient d'environ <b>±12&nbsp;%</b> (jusqu'à ±24&nbsp;% dans les cas extrêmes) selon les hypothèses de vitesse du moteur. Les durées en voiture sont <b>nettement plus incertaines</b>&nbsp;: les deux moteurs diffèrent d'un tiers en médiane, et l'écart avec une circulation réelle en heure de pointe n'est pas mesuré ici. Les temps en voiture sont donc à considérer comme des <b>minimums</b>. Une estimation à vol d'oiseau sous-évalue les temps par la route de 10&nbsp;% (vélo) à 29&nbsp;% (voiture) en médiane.</p>
+
+  <h3>5.3 Autres sources d'incertitude</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Élément</th><th>Nature de l'erreur</th><th>Ordre de grandeur</th><th>Statut</th></tr>
+    <tr><td>Population par commune</td><td>Toute la population d'une commune est comptée dans la zone qui contient son centre. Pour une grande commune, elle est comptée en entier ou pas du tout, même si la zone ne la couvre que partiellement.</td><td>23,7&nbsp;% de la population métropolitaine vit dans une commune de plus de 50&nbsp;000 habitants (15,2&nbsp;% au-delà de 100&nbsp;000 ; 39,0&nbsp;% au-delà de 20&nbsp;000). L'erreur n'est pas bornée pour ces communes.</td><td><span class="tag m">Mesuré</span></td></tr>
+    <tr><td>Localisation d'une adresse saisie</td><td>La Base Adresse Nationale renvoie le meilleur résultat, pas toujours l'adresse exacte (par exemple, une rue absente est remplacée par une autre rue du même code postal). Un score de confiance inférieur à 0,5 est signalé.</td><td>Variable. En regroupement par commune, la position est celle du centre de la commune&nbsp;: l'écart avec un domicile réel peut atteindre plusieurs kilomètres.</td><td><span class="tag n">Non mesuré</span></td></tr>
+    <tr><td>Complétude des horaires</td><td>Les réseaux absents des données ou dont le fichier n'a pas pu être récupéré ne sont pas pris en compte.</td><td>Deux réseaux de bus n'ont pas pu être téléchargés à la dernière construction (Calais, Le Puy-en-Velay). Aucun réseau de libre-service n'a été trouvé pour Nice.</td><td><span class="tag m">Constaté</span></td></tr>
+    <tr><td>Horaires théoriques</td><td>Pas de retards, d'annulations, de travaux, de saturation. Un mardi type est utilisé&nbsp;: l'offre varie selon le jour, les vacances scolaires et la saison.</td><td>Non quantifié.</td><td><span class="tag n">Non mesuré</span></td></tr>
+    <tr><td>Aménagements cyclables</td><td>Dépendent de la qualité de la cartographie collaborative. Un aménagement peut être absent, mal classé ou ne plus exister. La sécurité et le confort ne sont pas évalués.</td><td>Non quantifié.</td><td><span class="tag n">Non mesuré</span></td></tr>
+    <tr><td>Covoiturage, libre-service, recharge</td><td>Données déclaratives, mises à jour à des rythmes variables par leurs producteurs. Une aire peut être fermée, une borne hors service, un nombre de places inexact.</td><td>Non quantifié. La date de mise à jour est affichée quand elle existe.</td><td><span class="tag n">Non mesuré</span></td></tr>
+    <tr><td>Émissions de gaz à effet de serre</td><td>Facteurs moyens nationaux, appliqués à une distance routière commune à tous les modes motorisés. Les émissions réelles dépendent du véhicule, de son taux de remplissage, de la ligne et du mix électrique local.</td><td>Écart entre les facteurs de l'autobus selon la taille d'agglomération&nbsp;: +37&nbsp;% entre 0,147 et 0,202. Écart selon le périmètre pour la voiture&nbsp;: +60&nbsp;% entre combustion seule (0,156) et périmètre complet (0,249). Écart lié à la distance retenue&nbsp;: non quantifié.</td><td><span class="tag m">Mesuré</span></td></tr>
+    <tr><td>Scores sur 100</td><td>Les seuils sont des conventions. Deux sites proches d'un seuil peuvent changer de libellé pour une différence minime.</td><td>Sans objet statistique&nbsp;: à lire comme un classement relatif, pas comme une mesure.</td><td><span class="tag n">Convention</span></td></tr>
+  </table></div>
+</section>
+
+<section id="lecture">
+  <h2>6. Comment lire et présenter un résultat</h2>
+  <ul>
+    <li><b>Parler en ordres de grandeur.</b> Préférer «&nbsp;environ 45 minutes, à plus ou moins 20&nbsp;%&nbsp;» à «&nbsp;45 minutes&nbsp;». Arrondir aux cinq minutes.</li>
+    <li><b>Comparer plutôt que mesurer.</b> L'outil est le plus fiable pour comparer deux sites ou deux modes sur les mêmes hypothèses, car les biais s'appliquent de la même façon.</li>
+    <li><b>Préciser les hypothèses.</b> Citer le mode, le moment (heure de pointe ou journée moyenne), la date d'extraction des données et le fait que les temps de voiture sont hors circulation.</li>
+    <li><b>Vérifier ce qui décide.</b> Quand une conclusion dépend d'un seuil (par exemple «&nbsp;moins de 45 minutes&nbsp;»), vérifier le trajet sur un calculateur officiel de l'autorité organisatrice, et sur le terrain.</li>
+    <li><b>Ne pas sur-interpréter la population.</b> Les habitants affichés dans une zone indiquent un potentiel, pas un nombre de personnes qui feraient réellement le trajet.</li>
+  </ul>
+  <p>Formulation type&nbsp;: «&nbsp;Selon une estimation fondée sur les horaires théoriques d'un mardi type (données d'octobre 2026), le site est atteignable en transports en commun en 45 minutes ou moins depuis environ X&nbsp;% de la population de la zone étudiée. Cette estimation est indicative (marge d'incertitude de l'ordre de ±20&nbsp;%) et n'a pas été validée sur des trajets réels.&nbsp;»</p>
+</section>
+
+<section id="donnees-perso">
+  <h2>7. Données personnelles</h2>
+  <ul>
+    <li>Les lignes saisies dans «&nbsp;Domiciles des collaborateurs&nbsp;» sont envoyées au service public de géocodage (api-adresse.data.gouv.fr) pour être localisées. Les coordonnées obtenues sont ensuite envoyées au service d'itinéraires pour le calcul des temps par la route.</li>
+    <li>L'outil n'enregistre aucune de ces informations&nbsp;: elles restent en mémoire dans le navigateur de l'utilisateur et disparaissent à la fermeture de la page.</li>
+    <li>L'utilisation d'adresses de domicile relève de la réglementation sur les données personnelles (RGPD)&nbsp;: information préalable des personnes concernées, minimisation, finalité déterminée. <b>Privilégier les communes ou les codes postaux</b>, et conserver l'option de regroupement par commune.</li>
+    <li>Les adresses saisies, même regroupées, ne doivent pas être collées dans une page publique, un ticket ou un message partagé.</li>
+  </ul>
+</section>
+
+<section id="maj">
+  <h2>8. Mise à jour et reproductibilité</h2>
+  <ul>
+    <li>Les données de transport en commun, de vélo, de covoiturage, de libre-service et de recharge sont reconstruites par des scripts fournis avec l'outil, à partir des sources du tableau de la section 3. Une mise à jour trimestrielle est recommandée, et à chaque changement de service des principaux réseaux.</li>
+    <li>Les analyses de la section 5 sont reproductibles&nbsp;: l'analyse de sensibilité rejoue le calcul de la section 4.1 avec d'autres hypothèses, et la comparaison des moteurs d'itinéraires utilise des points tirés au hasard avec une graine fixe.</li>
+    <li>Les hypothèses (vitesses, coefficients, seuils) sont des paramètres modifiables du code de l'outil.</li>
+  </ul>
+</section>
+
+<section id="licences">
+  <h2>9. Licences et crédits</h2>
+  <ul>
+    <li>© les contributeurs d'OpenStreetMap, données sous licence ODbL (openstreetmap.org/copyright). Cela concerne la voirie, les aménagements cyclables (via Geovelo) et le fond de carte.</li>
+    <li>Fond de carte vectoriel&nbsp;: OpenFreeMap et OpenMapTiles. Fond Plan IGN&nbsp;: © IGN.</li>
+    <li>Horaires de transport en commun&nbsp;: fichiers publiés par les réseaux sur transport.data.gouv.fr. Chaque jeu de données reste soumis à sa propre licence, indiquée sur la plateforme.</li>
+    <li>Base Nationale des Lieux de Covoiturage, base nationale des IRVE, Base Adresse Nationale et API Découpage administratif&nbsp;: données ouvertes publiées sur data.gouv.fr et api.gouv.fr.</li>
+    <li>Calcul d'itinéraires&nbsp;: Valhalla, serveur public d'OpenStreetMap.</li>
+    <li>Facteurs d'émission&nbsp;: ADEME, Base Carbone®, consultée via le catalogue Ecodex.</li>
+    <li>Bibliothèques&nbsp;: Leaflet, MapLibre GL JS.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Document de méthode de l'outil d'analyse de la desserte d'un site. Version du 2 octobre 2026. <button type="button" class="tab" data-v="map">Retour à l'outil</button>.</p>
+</footer>
+
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -440,7 +706,7 @@ const WALK = 75, DETOUR = 1.3, MAX_WALK_MIN = 12, ISO_MAX = 75, ISO_RADIUS_KM = 
 const BANDS = [15, 30, 45, 60];
 const BAND_COL = [[0, 104, 55], [102, 189, 99], [253, 174, 97], [215, 48, 39]];
 map.createPane("iso"); map.getPane("iso").style.zIndex = 250;
-const gIso = L.layerGroup().addTo(map), gRing = L.layerGroup();
+const gIso = L.layerGroup().addTo(map);
 const NETS = {};
 
 function regionsAround(site) {
@@ -538,7 +804,7 @@ function isoStops(net, site, mode, mask) {
   return DS;
 }
 
-function isoRaster(net, DS, site) {
+function isoGrid(net, DS, site) {
   const dla = ISO_RADIUS_KM / 111, dlo = dla / Math.cos(site[0] * Math.PI / 180);
   const latMin = site[0] - dla, lonMin = site[1] - dlo;
   const cLat = CELL_M / 111000, cLon = cLat / Math.cos(site[0] * Math.PI / 180);
@@ -555,49 +821,109 @@ function isoRaster(net, DS, site) {
   };
   for (let i = 0; i < net.S; i++) if (DS[i] < ISO_MAX) splat(net.lat[i], net.lon[i], DS[i], ISO_MAX - DS[i]);
   splat(site[0], site[1], 0, 20);
-  const K = 3, OW = W * K, OH = H * K;
-  const cv = document.createElement("canvas"); cv.width = OW; cv.height = OH;
-  const ctx = cv.getContext("2d"), img = ctx.createImageData(OW, OH), band = new Int8Array(OW * OH).fill(-1);
-  const at = (x, y) => { const v = T[y * W + x]; return v === Infinity ? 150 : v; };
-  for (let oy = 0; oy < OH; oy++) {
-    const fy = Math.min(H - 1, Math.max(0, (oy + 0.5) / K - 0.5)), y0 = Math.min(H - 2, Math.floor(fy)), ty = fy - y0;
-    for (let ox = 0; ox < OW; ox++) {
-      const fx = Math.min(W - 1, Math.max(0, (ox + 0.5) / K - 0.5)), x0 = Math.min(W - 2, Math.floor(fx)), tx = fx - x0;
-      const t = (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
-      band[oy * OW + ox] = t <= 15 ? 0 : t <= 30 ? 1 : t <= 45 ? 2 : t <= 60 ? 3 : -1;
-    }
-  }
-  for (let oy = 0; oy < OH; oy++) for (let ox = 0; ox < OW; ox++) {
-    const i = oy * OW + ox, bd = band[i]; if (bd < 0) continue;
-    const edge = (ox + 1 < OW && band[i + 1] !== bd) || (oy + 1 < OH && band[i + OW] !== bd) || (ox > 0 && band[i - 1] < 0) || (oy > 0 && band[i - OW] < 0);
-    const c = BAND_COL[bd], o = ((OH - 1 - oy) * OW + ox) * 4;
-    if (edge) { img.data[o] = c[0] * 0.45; img.data[o + 1] = c[1] * 0.45; img.data[o + 2] = c[2] * 0.45; img.data[o + 3] = 235; }
-    else { img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 135; }
-  }
-  ctx.putImageData(img, 0, 0);
-  return { url: cv.toDataURL(), bounds: [[latMin, lonMin], [latMin + H * cLat, lonMin + W * cLon]], T, W, H, latMin, lonMin, cLat, cLon };
+  return { T, W, H, latMin, lonMin, cLat, cLon };
 }
 
-function isoSummary(net, R, site) {
-  const popTC = [0, 0, 0, 0], popVelo = [0, 0]; let total = 0;
-  net.coms.forEach(c => {
-    total += c[2];
-    const y = Math.floor((c[0] - R.latMin) / R.cLat), x = Math.floor((c[1] - R.lonMin) / R.cLon);
-    if (y >= 0 && y < R.H && x >= 0 && x < R.W) { const t = R.T[y * R.W + x]; BANDS.forEach((b, i) => { if (t <= b) popTC[i] += c[2]; }); }
-    const d = hav(site, [c[0], c[1]]); if (d <= 3400) popVelo[0] += c[2]; if (d <= 6800) popVelo[1] += c[2];
+// Contours vectoriels (marching squares) : anneaux [[lat, lon], ...] des zones a th minutes ou moins
+function contourRings(G, th) {
+  const { T, W, H } = G, W2 = W + 2, big = 1e4;
+  const val = (x, y) => { x -= 1; y -= 1; if (x < 0 || y < 0 || x >= W || y >= H) return big; const v = T[y * W + x]; return v === Infinity ? big : v; };
+  const P = new Map(), adj = new Map();
+  const ep = (x0, y0, x1, y1) => {
+    const key = y0 === y1 ? (Math.min(x0, x1) + y0 * W2) * 2 : (x0 + Math.min(y0, y1) * W2) * 2 + 1;
+    if (!P.has(key)) {
+      const a = val(x0, y0), b = val(x1, y1); let t = 0.5;
+      if (a < big && b < big && a !== b) t = Math.max(0, Math.min(1, (th - a) / (b - a)));
+      P.set(key, [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+    }
+    return key;
+  };
+  const link = (a, b) => { (adj.get(a) || adj.set(a, []).get(a)).push(b); (adj.get(b) || adj.set(b, []).get(b)).push(a); };
+  for (let y = 0; y <= H; y++) for (let x = 0; x <= W; x++) {
+    const m = (val(x, y) <= th ? 8 : 0) | (val(x + 1, y) <= th ? 4 : 0) | (val(x + 1, y + 1) <= th ? 2 : 0) | (val(x, y + 1) <= th ? 1 : 0);
+    if (m === 0 || m === 15) continue;
+    const top = () => ep(x, y, x + 1, y), right = () => ep(x + 1, y, x + 1, y + 1), bottom = () => ep(x, y + 1, x + 1, y + 1), left = () => ep(x, y, x, y + 1);
+    switch (m) {
+      case 1: case 14: link(left(), bottom()); break;
+      case 2: case 13: link(bottom(), right()); break;
+      case 3: case 12: link(left(), right()); break;
+      case 4: case 11: link(top(), right()); break;
+      case 5: link(top(), right()); link(left(), bottom()); break;
+      case 6: case 9: link(top(), bottom()); break;
+      case 7: case 8: link(top(), left()); break;
+      case 10: link(top(), left()); link(bottom(), right()); break;
+    }
+  }
+  const rings = [], seen = new Set();
+  for (const k0 of adj.keys()) {
+    if (seen.has(k0)) continue;
+    const ring = []; let cur = k0, prev = -1;
+    for (;;) {
+      seen.add(cur); const [px, py] = P.get(cur);
+      ring.push([G.latMin + (py - 0.5) * G.cLat, G.lonMin + (px - 0.5) * G.cLon]);
+      const nb = adj.get(cur), nx = (nb[0] !== prev && !seen.has(nb[0])) ? nb[0] : (nb[1] !== undefined && nb[1] !== prev && !seen.has(nb[1]) ? nb[1] : -1);
+      if (nx === -1) break; prev = cur; cur = nx;
+    }
+    let area = 0; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += ring[j][1] * ring[i][0] - ring[i][1] * ring[j][0];
+    if (ring.length >= 4 && Math.abs(area / 2) / (G.cLat * G.cLon) >= 2) rings.push(ring);
+  }
+  return rings;
+}
+const ringsFromGrid = G => BANDS.map(th => contourRings(G, th));
+function ringsFromValhalla(j) {
+  const by = {};
+  (j.features || []).forEach(f => {
+    const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    by[Math.round(f.properties.contour)] = polys.flatMap(poly => poly.map(r => r.map(([lo, la]) => [la, lo])));
   });
-  return { popTC, popVelo, total };
+  return BANDS.map(b => by[b] || []);
+}
+function ringsFromCircle(site, kmh) {
+  return BANDS.map(b => { const rad = kmh * b / 60 / 1.3 * 1000;
+    return [Array.from({ length: 72 }, (_, i) => { const a = 2 * Math.PI * i / 72; return [site[0] + rad * Math.cos(a) / 111000, site[1] + rad * Math.sin(a) / (111000 * Math.cos(site[0] * Math.PI / 180))]; })]; });
+}
+function drawZones(rings) {
+  if (!$("tIso").checked) return;
+  rings.forEach((rs, k) => {
+    const latlngs = rs.concat(k > 0 ? rings[k - 1] : []); if (!latlngs.length) return;
+    const c = BAND_COL[k];
+    L.polygon(latlngs, { pane: "iso", interactive: false, color: `rgb(${c.map(v => Math.round(v * 0.55)).join(",")})`, weight: 1.6, opacity: .95, fillColor: `rgb(${c.join(",")})`, fillOpacity: .5, fillRule: "evenodd" }).addTo(gIso);
+  });
+}
+function inRings(pt, rings) {
+  let inside = false;
+  for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [yi, xi] = r[i], [yj, xj] = r[j];
+    if (((yi > pt[0]) !== (yj > pt[0])) && (pt[1] < (xj - xi) * (pt[0] - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function popFromRings(coms, rings) {
+  const cum = [0, 0, 0, 0]; let total = 0;
+  coms.forEach(c => { total += c[2]; for (let k = 0; k < 4; k++) if (rings[k].length && inRings([c[0], c[1]], rings[k])) { for (let j = k; j < 4; j++) cum[j] += c[2]; break; } });
+  return { cum, total };
+}
+
+// Service public de calcul d'itineraires sur le reseau routier (Valhalla / OpenStreetMap)
+const VALHALLA = "https://valhalla1.openstreetmap.de/";
+const COST = { bike: ["bicycle", { bicycle: { cycling_speed: 15 } }], ebike: ["bicycle", { bicycle: { cycling_speed: 20 } }], walk: ["pedestrian", { pedestrian: { walking_speed: 4.5 } }], car: ["auto", {}] };
+async function valhalla(path, body, ms = 15000) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(VALHALLA + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
 }
 
 function fmtPop(n) { return Math.round(n).toLocaleString("fr-FR").replace(/\u202f|\u00a0/g, " "); }
 
 async function computeIsoCore(site) {
-  gIso.clearLayers(); gRing.clearLayers(); lastIso = null;
+  gIso.clearLayers(); lastIso = null;
   const box = $("isoBox"); if (!INDEX) { box.style.display = "none"; return; }
   box.style.display = "block";
-  L.circle(site, { radius: 3400, color: "#7c3aed", weight: 1.5, dashArray: "5 4", fill: false }).bindTooltip("Vélo, environ 15 min").addTo(gRing);
-  L.circle(site, { radius: 6800, color: "#7c3aed", weight: 1.5, dashArray: "5 4", fill: false }).bindTooltip("Vélo, environ 30 min").addTo(gRing);
-  $("tRing").checked ? gRing.addTo(map) : map.removeLayer(gRing);
+  const what = $("isoWhat").value, tcLike = what === "tc" || what === "bus";
+  ["isoMode", "mBus", "mTram", "mMetro", "mTrain"].forEach(i => { $(i).disabled = !tcLike; });
   const regs = regionsAround(site);
   if (!regs.length || !regs.some(g => g.bus)) { $("isoStatus").textContent = "Zones de temps indisponibles hors des régions préchargées."; $("isoTable").innerHTML = ""; return; }
   const prevStatus = $("status").textContent;
@@ -608,20 +934,30 @@ async function computeIsoCore(site) {
     if (!loaded.every(r => r.bus.pat)) { $("isoStatus").textContent = "Les données préchargées ne contiennent pas encore les parcours : relancer build_region.py."; return; }
     const key = loaded.map(r => r.e.code + r.e.generated).join("|");
     const net = NETS[key] ||= buildNet(loaded);
-    const DS = isoStops(net, site, $("isoMode").value, ["mBus", "mTram", "mMetro", "mTrain"].map(i => $(i).checked));
-    const R = isoRaster(net, DS, site);
-    lastIso = R;
-    if ($("tIso").checked) L.imageOverlay(R.url, R.bounds, { pane: "iso", interactive: false }).addTo(gIso);
-    const sm = isoSummary(net, R, site);
-    const hex = c => `rgb(${c.join(",")})`;
-    $("isoTable").innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:var(--muted)"><th style="padding:4px 0">Temps</th><th>Habitants (cumul)</th><th>Part</th></tr>` +
-      BANDS.map((b, i) => `<tr style="border-top:1px solid var(--line)"><td style="padding:5px 0"><i style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${hex(BAND_COL[i])};vertical-align:-2px;margin-right:6px"></i>≤ ${b} min</td><td>${fmtPop(sm.popTC[i])}</td><td>${(100 * sm.popTC[i] / sm.total).toFixed(1).replace(".", ",")} %</td></tr>`).join("") +
-      [["Vélo ≤ 15 min", sm.popVelo[0]], ["Vélo ≤ 30 min", sm.popVelo[1]]].map(([l, v]) => `<tr style="border-top:1px solid var(--line)"><td style="padding:5px 0"><i style="display:inline-block;width:14px;height:0;border-top:2px dashed #7c3aed;vertical-align:3px;margin-right:6px"></i>${l}</td><td>${fmtPop(v)}</td><td>${(100 * v / sm.total).toFixed(1).replace(".", ",")} %</td></tr>`).join("") + `</table>` +
+    const freq = $("isoMode").value, when = freq === "pointe" ? "heure de pointe" : "journée moyenne";
+    // temps en transports en commun : toujours calculés (estimations au clic, collaborateurs)
+    lastIso = isoGrid(net, isoStops(net, site, freq, ["mBus", "mTram", "mMetro", "mTrain"].map(i => $(i).checked)), site);
+    let rings, label, note;
+    if (what === "tc") { rings = ringsFromGrid(lastIso); label = "transports en commun"; note = `Temps de porte à porte pour arriver au site en ${when}.`; }
+    else if (what === "bus") { rings = ringsFromGrid(isoGrid(net, isoStops(net, site, freq, [true, false, false, false]), site)); label = "bus seulement"; note = `Temps de porte à porte en bus pour arriver au site en ${when}.`; }
+    else {
+      const kmh = what === "bike" ? 15 : 20; label = what === "bike" ? "vélo" : "vélo électrique";
+      try {
+        const [cm, co] = COST[what];
+        rings = ringsFromValhalla(await valhalla("isochrone", { locations: [{ lat: site[0], lon: site[1] }], costing: cm, costing_options: co, contours: BANDS.map(t => ({ time: t })), polygons: true, denoise: 0.2, generalize: 40 }));
+        note = `Calculé sur le réseau routier et cyclable (${kmh} km/h en moyenne, relief non pris en compte).`;
+      } catch (e) { console.warn(e); rings = ringsFromCircle(site, kmh); note = "Service de calcul d'itinéraires injoignable : zones estimées à vol d'oiseau."; }
+    }
+    drawZones(rings);
+    const sm = popFromRings(net.coms, rings), hex = c => `rgb(${c.join(",")})`;
+    $("isoTable").innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:var(--muted)"><th style="padding:4px 0">Temps pour venir (${label})</th><th>Habitants</th><th>Part</th></tr>` +
+      BANDS.map((b, i) => `<tr style="border-top:1px solid var(--line)"><td style="padding:5px 0"><i style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${hex(BAND_COL[i])};vertical-align:-2px;margin-right:6px"></i>${b} min ou moins</td><td>${fmtPop(sm.cum[i])}</td><td>${(100 * sm.cum[i] / sm.total).toFixed(1).replace(".", ",")} %</td></tr>`).join("") + `</table>` +
       `<div class="note" style="margin-top:4px">Population de référence : ${fmtPop(sm.total)} habitants (${loaded.map(r => r.e.name).join(", ")}).</div>`;
-    $("isoStatus").textContent = `Arrivée au site en ${$("isoMode").value === "pointe" ? "heure de pointe" : "journée moyenne"}.`;
+    $("isoStatus").textContent = note;
   } catch (e) { console.warn(e); $("isoStatus").textContent = "Calcul impossible : " + e.message; }
   if ($("status").textContent.startsWith("Chargement")) setStatus(prevStatus);
 }
+
 async function computeIso(site) { try { await computeIsoCore(site); } finally { renderStaff(); } }
 let lastIso = null;
 const gHome = L.layerGroup().addTo(map);
@@ -629,30 +965,63 @@ const fmtDur = m => { m = Math.round(m); if (m < 60) return m + " min"; return M
 function setLock() { map.getContainer().style.cursor = ($("lockSite").checked || etabPick) ? "crosshair" : ""; }
 $("lockSite").onchange = setLock;
 
+// ---------- Emissions de GES d'un trajet (facteurs ADEME, Base Carbone) ----------
+const FE_GES = { car: 0.249, ev: 0.103, tram: 0.00444, rer: 0.00978, ter: 0.0277, vae: 0.011 };   // kgCO2e par km (voiture, vae) ou par passager.km
+const GES_DAYS = 220;
+function sitePopulation(site) {
+  let best = null, bd = Infinity;
+  Object.values(REG).forEach(r => (r.bus.com || []).forEach(c => { const d = hav(site, [c[0], c[1]]); if (d < bd) { bd = d; best = c[2]; } }));
+  return best;
+}
+function gesRows(kmCar, kmBike, site) {
+  const pop = sitePopulation(site), bus = pop === null ? 0.151 : pop < 100000 ? 0.202 : pop <= 250000 ? 0.147 : 0.151;
+  const rail = pickRegion(site[0], site[1]) === "11" ? ["RER, Transilien", FE_GES.rer] : ["Train régional (TER)", FE_GES.ter];
+  return [["Voiture thermique, seul", kmCar * FE_GES.car], ["Covoiturage à deux", kmCar * FE_GES.car / 2], ["Voiture électrique", kmCar * FE_GES.ev],
+    ["Bus", kmCar * bus], ["Tramway, métro", kmCar * FE_GES.tram], [rail[0], kmCar * rail[1]], ["Vélo électrique", kmBike * FE_GES.vae], ["Vélo, marche", 0]];
+}
+const fmtKg = kg => kg === 0 ? "0" : kg < 1 ? Math.round(kg * 1000) + " g" : kg.toFixed(1).replace(".", ",") + " kg";
+const fmtYear = kg => { const y = kg * 2 * GES_DAYS; return y === 0 ? "0" : y >= 1000 ? (y / 1000).toFixed(2).replace(".", ",") + " t" : Math.round(y) + " kg"; };
+
+async function roadTimes(site, pt) {
+  const one = async k => {
+    const [cm, co] = COST[k];
+    try { const j = await valhalla("route", { locations: [{ lat: pt[0], lon: pt[1] }, { lat: site[0], lon: site[1] }], costing: cm, costing_options: co, directions_options: { units: "kilometers" } }, 12000); const t = j.trip.summary; return { min: t.time / 60, km: t.length }; }
+    catch { return null; }
+  };
+  const [bike, ebike, walk, car] = await Promise.all(["bike", "ebike", "walk", "car"].map(one));
+  return { bike, ebike, walk, car };
+}
 async function estimateFrom(ll) {
   const site = [lastSite.lat, lastSite.lon], pt = [ll.lat, ll.lng];
   gHome.clearLayers();
   const d = hav(site, pt), km = d / 1000;
   L.polyline([site, pt], { color: "#7c3aed", weight: 2, dashArray: "4 6" }).addTo(gHome);
   const mk = L.circleMarker(pt, { radius: 8, color: "#fff", weight: 2, fillColor: "#7c3aed", fillOpacity: 1 }).addTo(gHome);
-  const walk = d * DETOUR / WALK, bike = km * 1.25 / 16 * 60, ebike = km * 1.25 / 21 * 60;
-  const car = km * 1.3 / (km <= 10 ? 28 : km <= 30 ? 45 : 65) * 60;
+  const est = { walk: d * DETOUR / WALK, bike: km * 1.3 / 15 * 60, ebike: km * 1.3 / 20 * 60, car: km * 1.4 / (km <= 10 ? 25 : km <= 30 ? 40 : 60) * 60 };
   let tc = "non calculé hors des régions préchargées";
   if (lastIso) {
     const R = lastIso, y = Math.floor((pt[0] - R.latMin) / R.cLat), x = Math.floor((pt[1] - R.lonMin) / R.cLon);
     if (y >= 0 && y < R.H && x >= 0 && x < R.W) { const t = R.T[y * R.W + x]; tc = isFinite(t) ? "environ " + fmtDur(t) : "pas de liaison en moins de 1 h 15"; }
     else tc = "hors de la zone calculée (70 km)";
   }
-  const row = (a, b) => `<tr><td style="padding:2px 10px 2px 0">${a}</td><td><b>${b}</b></td></tr>`;
-  const html = label => `<b>${esc(label)}</b><br>${fmtM(d)} du site à vol d'oiseau<table style="margin-top:6px;font-size:13px">` +
-    row("Transports en commun", tc) + row("Vélo", "environ " + fmtDur(bike)) + row("Vélo électrique", "environ " + fmtDur(ebike)) +
-    row("À pied", "environ " + fmtDur(walk)) + row("Voiture (indicatif)", "environ " + fmtDur(car)) +
-    `</table><div style="font-size:11px;color:#636363;margin-top:6px;max-width:240px">Estimations de porte à porte. Vélo : distance x 1,25 à 16 km/h (21 km/h en électrique). Voiture hors stationnement et embouteillages.</div>`;
-  mk.bindPopup(html("Point choisi")).openPopup();
-  reverse(pt[0], pt[1]).then(l => mk.setPopupContent(html(l)));
+  let road = null, label = "Point choisi";
+  const row = (a, b) => `<tr><td style="padding:2px 10px 2px 0">${a}</td><td>${b}</td></tr>`;
+  const cell = k => road && road[k] ? `<b>${fmtDur(road[k].min)}</b> <span style="color:#636363">(${road[k].km.toFixed(1).replace(".", ",")} km)</span>` : `<b>~ ${fmtDur(est[k])}</b> <span style="color:#636363">(estimation)</span>`;
+  const gesHtml = () => {
+    const kmCar = road && road.car ? road.car.km : km * 1.4, kmBike = road && road.bike ? road.bike.km : km * 1.3;
+    return `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #ddd"><b>Émissions de gaz à effet de serre</b> <span style="color:#636363;font-size:11px">(aller simple, et par an)</span>` +
+      `<table style="margin-top:4px;font-size:12px;width:100%">` + gesRows(kmCar, kmBike, site).map(([n, kg]) => `<tr><td style="padding:1px 8px 1px 0">${n}</td><td style="text-align:right"><b>${fmtKg(kg)}</b></td><td style="text-align:right;color:#636363">${fmtYear(kg)}</td></tr>`).join("") +
+      `</table><div style="font-size:10.5px;color:#636363;margin-top:4px;max-width:300px">CO2e, facteurs ADEME (Base Carbone), amont et combustion. Distance routière commune aux modes motorisés. Par an : 2 trajets par jour, ${GES_DAYS} jours. Vélo et marche : hors fabrication et alimentation.</div></div>`;
+  };
+  const html = () => `<b>${esc(label)}</b><br>${fmtM(d)} du site à vol d'oiseau<table style="margin-top:6px;font-size:13px">` +
+    row("Transports en commun", `<b>${tc}</b>`) + row("Vélo", cell("bike")) + row("Vélo électrique", cell("ebike")) + row("À pied", cell("walk")) + row("Voiture", cell("car")) +
+    `</table><div style="font-size:11px;color:#636363;margin-top:6px;max-width:300px">${road ? "Vélo, pied et voiture : temps par la route (OpenStreetMap), hors embouteillages et stationnement. Vélo à 15 km/h, électrique à 20 km/h." : "Calcul par la route en cours…"}</div>` + gesHtml();
+  mk.bindPopup(html(), { maxWidth: 340 }).openPopup();
+  reverse(pt[0], pt[1]).then(l => { label = l; mk.setPopupContent(html()); });
+  roadTimes(site, pt).then(r => { road = r; mk.setPopupContent(html()); });
 }
 
-["tIso", "tRing", "isoMode", "mBus", "mTram", "mMetro", "mTrain"].forEach(i => $(i).onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); });
+["tIso", "isoWhat", "isoMode", "mBus", "mTram", "mMetro", "mTrain"].forEach(i => $(i).onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); });
 
 
 // ---------- Covoiturage (Base Nationale des Lieux de Covoiturage) ----------
@@ -844,7 +1213,7 @@ async function placeStaff() {
     pts = [...by.values()];
     await Promise.all(pts.map(async c => { const ce = await communeCentre(c.code); if (ce) { c.lat = ce.lat; c.lon = ce.lon; c.label = `${ce.nom} (${c.label.replace(/^.*\((.*)\)$/, "$1")})`; } }));
   } else pts = ok.map(r => ({ lat: r.lat, lon: r.lon, label: r.label, n: r.n, score: r.score }));
-  staff = pts;
+  staff = pts; staffRoadPending = false;
   const total = pts.reduce((a, p) => a + p.n, 0), weak = $("staffCommune").checked ? 0 : pts.filter(p => p.score < 0.5).length;
   st.textContent = `${total} collaborateur(s) placé(s) sur ${pts.length} lieu(x).` + (cut ? " Seules les 600 premières lignes ont été traitées." : "") +
     (fail.length ? ` ${fail.length} ligne(s) non localisée(s) : ${fail.slice(0, 5).map(f => f.q).join(" ; ")}${fail.length > 5 ? "…" : ""}.` : "") + (weak ? ` ${weak} adresse(s) à vérifier (localisation incertaine).` : "");
@@ -858,36 +1227,60 @@ function tcAt(pt) {
   return (y >= 0 && y < R.H && x >= 0 && x < R.W) ? R.T[y * R.W + x] : Infinity;
 }
 
+let staffRoadPending = false;
+async function fetchStaffRoads(siteKey) {
+  staffRoadPending = true;
+  const target = [{ lat: lastSite.lat, lon: lastSite.lon }], pts = staff.filter(p => !p.roads?.[siteKey]);
+  try {
+    for (let i = 0; i < pts.length; i += 40) {
+      const chunk = pts.slice(i, i + 40), res = {};
+      await Promise.all(["bike", "ebike", "car"].map(async k => {
+        const [cm, co] = COST[k];
+        try {
+          const j = await valhalla("sources_to_targets", { sources: chunk.map(p => ({ lat: p.lat, lon: p.lon })), targets: target, costing: cm, costing_options: co }, 40000);
+          res[k] = j.sources_to_targets.map(r => (r[0] && r[0].time != null) ? { min: r[0].time / 60, km: r[0].distance } : null);
+        } catch { res[k] = null; }
+      }));
+      chunk.forEach((p, idx) => { p.roads = p.roads || {}; p.roads[siteKey] = {}; ["bike", "ebike", "car"].forEach(k => { const v = res[k] && res[k][idx]; if (v) p.roads[siteKey][k] = v; }); });
+    }
+  } finally { staffRoadPending = false; }
+  renderStaff();
+}
+
 function renderStaff() {
   gStaff.clearLayers();
   const box = $("staffTable");
   if (!staff.length || !lastSite) { box.innerHTML = ""; staffRows = []; return; }
-  const site = [lastSite.lat, lastSite.lon], total = staff.reduce((a, p) => a + p.n, 0);
+  const site = [lastSite.lat, lastSite.lon], total = staff.reduce((a, p) => a + p.n, 0), siteKey = site[0].toFixed(5) + "," + site[1].toFixed(5);
   const rows = staff.map(p => {
-    const d = hav(site, [p.lat, p.lon]), km = d / 1000;
-    return { ...p, d, km, tc: tcAt([p.lat, p.lon]), bike: km * 1.25 / 16 * 60, ebike: km * 1.25 / 21 * 60, car: km * 1.3 / (km <= 10 ? 28 : km <= 30 ? 45 : 65) * 60 };
+    const d = hav(site, [p.lat, p.lon]), km = d / 1000, rd = p.roads?.[siteKey] || {};
+    return { ...p, d, km, rd: !!(rd.bike || rd.car), kmRoad: rd.bike ? rd.bike.km : null, tc: tcAt([p.lat, p.lon]),
+      bike: rd.bike ? rd.bike.min : km * 1.3 / 15 * 60, ebike: rd.ebike ? rd.ebike.min : km * 1.3 / 20 * 60,
+      car: rd.car ? rd.car.min : km * 1.4 / (km <= 10 ? 25 : km <= 30 ? 40 : 60) * 60 };
   }).sort((a, b) => b.n - a.n);
   staffRows = rows;
+  if (!staffRoadPending && staff.some(p => !p.roads?.[siteKey])) fetchStaffRoads(siteKey);
   const hasTc = rows.some(r => r.tc !== null);
   rows.forEach(r => {
     const b = r.tc === null ? -2 : r.tc <= 15 ? 0 : r.tc <= 30 ? 1 : r.tc <= 45 ? 2 : r.tc <= 60 ? 3 : -1;
-    const fill = b >= 0 ? `rgb(${BAND_COL[b].join(",")})` : b === -1 ? "#6b1d5c" : "#9ca3af";
+    const fill = b >= 0 ? `rgb(${BAND_COL[b].join(",")})` : b === -1 ? "#6b1d5c" : "#9ca3af", pre = r.rd ? "" : "~ ";
     L.circleMarker([r.lat, r.lon], { radius: Math.min(22, 5 + 3 * Math.sqrt(r.n)), color: "#0b3d33", weight: 1.5, fillColor: fill, fillOpacity: .9 })
-      .bindPopup(`<b>${esc(r.label)}</b><br>${r.n} collaborateur(s), ${fmtM(r.d)} du site à vol d'oiseau<table style="margin-top:6px;font-size:13px">` +
+      .bindPopup(`<b>${esc(r.label)}</b><br>${r.n} collaborateur(s), ${fmtM(r.d)} du site à vol d'oiseau${r.kmRoad != null ? ", " + r.kmRoad.toFixed(1).replace(".", ",") + " km par la route" : ""}<table style="margin-top:6px;font-size:13px">` +
         `<tr><td style="padding:2px 10px 2px 0">Transports en commun</td><td><b>${r.tc === null ? "non calculé" : isFinite(r.tc) && r.tc <= 75 ? "environ " + fmtDur(r.tc) : "plus de 1 h 15 ou sans liaison"}</b></td></tr>` +
-        `<tr><td style="padding:2px 10px 2px 0">Vélo</td><td><b>${fmtDur(r.bike)}</b></td></tr><tr><td style="padding:2px 10px 2px 0">Vélo électrique</td><td><b>${fmtDur(r.ebike)}</b></td></tr>` +
-        `<tr><td style="padding:2px 10px 2px 0">Voiture (indicatif)</td><td><b>${fmtDur(r.car)}</b></td></tr></table>`).addTo(gStaff);
+        `<tr><td style="padding:2px 10px 2px 0">Vélo</td><td><b>${pre}${fmtDur(r.bike)}</b></td></tr><tr><td style="padding:2px 10px 2px 0">Vélo électrique</td><td><b>${pre}${fmtDur(r.ebike)}</b></td></tr>` +
+        `<tr><td style="padding:2px 10px 2px 0">Voiture</td><td><b>${pre}${fmtDur(r.car)}</b></td></tr></table>`).addTo(gStaff);
   });
   const cnt = f => rows.filter(f).reduce((a, r) => a + r.n, 0), pct = v => (100 * v / total).toFixed(0) + " %";
   const tr = (a, v) => `<tr style="border-top:1px solid var(--line)"><td style="padding:4px 0">${a}</td><td>${v}</td><td>${pct(v)}</td></tr>`;
   let med = 0; { let acc = 0; for (const r of [...rows].sort((a, b) => a.d - b.d)) { acc += r.n; if (acc >= total / 2) { med = r.km; break; } } }
+  const roadNote = rows.some(r => r.rd) ? "Vélo, vélo électrique et voiture : temps calculés par la route (OpenStreetMap), hors embouteillages." : staffRoadPending ? "Calcul des temps par la route en cours…" : "Vélo et voiture : estimations (calcul par la route indisponible).";
   box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px"><tr style="text-align:left;color:var(--muted)"><th style="padding:4px 0">${total} collaborateur(s)</th><th>Nombre</th><th>Part</th></tr>` +
     (hasTc ? BANDS.map(b => tr(`Transports en commun ≤ ${b} min`, cnt(r => r.tc !== null && r.tc <= b))).join("") + tr("Plus d'1 h ou sans liaison", cnt(r => r.tc !== null && !(r.tc <= 60))) :
       `<tr><td colspan="3" style="padding:4px 0" class="note">Zones de temps indisponibles (hors régions préchargées) : temps en transports en commun non calculés.</td></tr>`) +
     [15, 30, 45].map(m => tr(`Vélo ≤ ${m} min`, cnt(r => r.bike <= m))).join("") + tr("Vélo électrique ≤ 30 min", cnt(r => r.ebike <= 30)) +
-    `</table><div class="note" style="margin-top:4px">Distance médiane à vol d'oiseau : ${med.toFixed(1).replace(".", ",")} km.</div>` +
+    `</table><div class="note" style="margin-top:4px">Distance médiane à vol d'oiseau : ${med.toFixed(1).replace(".", ",")} km. ${roadNote}</div>` +
     `<div class="note" style="margin-top:6px"><b style="color:var(--ink)">Principaux lieux</b></div><ul class="note" style="margin:2px 0 0;padding-left:18px">` +
-    rows.slice(0, 8).map(r => `<li>${esc(r.label)} : ${r.n} pers., ${r.km.toFixed(1).replace(".", ",")} km, ${r.tc === null ? "TC non calculé" : isFinite(r.tc) && r.tc <= 75 ? "TC " + fmtDur(r.tc) : "TC > 1 h 15"}</li>`).join("") + `</ul>`;
+    rows.slice(0, 8).map(r => `<li>${esc(r.label)} : ${r.n} pers., ${(r.kmRoad ?? r.km).toFixed(1).replace(".", ",")} km${r.kmRoad != null ? " par la route" : ""}, ${r.tc === null ? "TC non calculé" : isFinite(r.tc) && r.tc <= 75 ? "TC " + fmtDur(r.tc) : "TC > 1 h 15"}</li>`).join("") + `</ul>`;
 }
 
 $("staffGo").onclick = placeStaff;
@@ -1068,8 +1461,10 @@ function draw(site, label, bus, velo) {
   [gBus, gVelo, gCircle, gSite, gStops].forEach(g => g.clearLayers());
   drawCovoit(site); drawVls(site); drawIrve(site); renderStaff(); drawEtab();
   lineLayers = {};
-  L.circle(site, { radius: R_BUS, color: "#636363", weight: 1, dashArray: "4 4", fillOpacity: 0.02 }).addTo(gCircle);
-  L.circle(site, { radius: R_BUS_SCORE, color: "#636363", weight: 1, dashArray: "4 4", fillOpacity: 0.04 }).addTo(gCircle);
+  [5000, 10000].forEach(r => {
+    L.circle(site, { radius: r, color: "#636363", weight: 1.3, dashArray: "6 5", fill: false, interactive: false }).addTo(gCircle);
+    L.marker([site[0] + r / 111000, site[1]], { interactive: false, icon: L.divIcon({ className: "", html: `<div class="cLabel">${r / 1000} km</div>`, iconSize: [40, 16], iconAnchor: [20, 8] }) }).addTo(gCircle);
+  });
   L.marker(site).bindPopup("<b>Site analysé</b><br>" + esc(label)).addTo(gSite);
 
   velo.ways.forEach(w => {
@@ -1193,6 +1588,16 @@ map.on("click", async e => {
 const leg = L.control({ position: "bottomright" });
 leg.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.innerHTML = '<i style="border-color:#15803d"></i>Piste cyclable<br><i style="border-color:#65a30d;border-top-style:dashed"></i>Bande cyclable<br><i style="border-color:#a3a3a3;border-top-style:dotted"></i>Zone apaisée<br><i style="border-color:#1d4ed8"></i>Ligne de bus<br><i style="border-color:#1d4ed8;border-top-width:7px"></i>Train, RER, métro, tram<br><b style="color:#ea580c">●</b> Aire de covoiturage<br><span style="color:rgb(0,104,55)">■</span><span style="color:rgb(102,189,99)">■</span><span style="color:rgb(253,174,97)">■</span><span style="color:rgb(215,48,39)">■</span> Temps : 15, 30, 45, 60 min<br><b style="color:#0284c7">■</b> Station vélo en libre-service<br><b style="color:#16a34a">●</b> Borne de recharge<br><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#7c3aed;color:#fff;font-size:10px;text-align:center;line-height:14px;font-weight:700">É</span> Établissement'; return d; };
 leg.addTo(map);
+function showView(v) {
+  const m = v === "method";
+  $("methodView").hidden = !m;
+  if (m) { $("methodView").scrollTop = 0; history.replaceState(null, "", "#methodologie"); }
+  else { history.replaceState(null, "", location.pathname + location.search); setTimeout(() => map.invalidateSize(), 50); }
+}
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => showView(b.dataset.v));
+$("goMethod").onclick = e => { e.preventDefault(); showView("method"); };
+document.querySelectorAll("#methodView .mnav a").forEach(a => a.onclick = e => { e.preventDefault(); const t = document.getElementById(a.getAttribute("href").slice(1)); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); });
+if (location.hash === "#methodologie") showView("method");
 loadIndex().then(() => {
   (new URLSearchParams(location.search).get("off") || "").split(",").filter(Boolean).forEach(id => { if ($(id)) $(id).checked = false; });
   if (window.refreshChips) window.refreshChips();
