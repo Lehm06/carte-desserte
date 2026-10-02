@@ -76,6 +76,9 @@
     <label class="note" style="display:flex;gap:8px;align-items:center;margin-top:6px">Région des données
       <select id="regionSel" style="flex:1;padding:6px;border:1px solid #c9c6bd;border-radius:6px;font:inherit"><option value="auto">Détection automatique</option></select></label>
     <div id="dataInfo" class="note" style="margin-top:4px"></div>
+    <div id="lockBox" style="display:none;margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#faf9f6">
+      <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="lockSite" checked style="margin-top:3px"><span><b>Site verrouillé.</b> Cliquer sur la carte estime le temps de trajet depuis ce point jusqu'au site. Décocher pour analyser un autre site au clic.</span></label>
+    </div>
   </div>
 
   <section class="score" id="score" aria-live="polite">
@@ -90,6 +93,11 @@
     <div class="opts">
       <label><input type="checkbox" id="tIso" checked> Afficher les zones de temps (transports en commun)</label>
       <label><input type="checkbox" id="tRing"> Afficher les anneaux vélo (15 et 30 min)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px">Modes pris en compte :
+        <label><input type="checkbox" id="mBus" checked> Bus</label>
+        <label><input type="checkbox" id="mTram" checked> Tramway</label>
+        <label><input type="checkbox" id="mMetro" checked> Métro</label>
+        <label><input type="checkbox" id="mTrain" checked> RER et trains régionaux</label></div>
       <label>Fréquence retenue <select id="isoMode"><option value="pointe" selected>Heure de pointe</option><option value="jour">Journée moyenne</option></select></label>
     </div>
     <div id="isoStatus" class="note" style="margin:6px 0"></div>
@@ -281,11 +289,21 @@ function pickRegion(lat, lon) {
   return hits[0].code;
 }
 
+async function fetchJson(u) {
+  const r = await fetch(u); if (!r.ok) throw new Error("HTTP " + r.status);
+  const buf = await r.arrayBuffer(), u8 = new Uint8Array(buf);
+  if (u8[0] === 0x1f && u8[1] === 0x8b) {
+    if (typeof DecompressionStream === "undefined") throw new Error("navigateur trop ancien (mettre à jour Edge ou Chrome)");
+    return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).json();
+  }
+  return JSON.parse(new TextDecoder().decode(u8));
+}
+
 async function loadRegion(code) {
   if (REG[code]) return REG[code];
   const e = INDEX.regions.find(g => g.code === code);
   setStatus(`Chargement des données de ${e.name}…`);
-  const [bus, velo] = await Promise.all([e.bus, e.velo].map(u => fetch(u).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })));
+  const [bus, velo] = await Promise.all([e.bus, e.velo].map(fetchJson));
   const ways = [];
   [["dedie", "dedie"], ["bande", "bande"], ["apaise", "calme"]].forEach(([k, kind]) => velo[k].forEach(s => {
     const pts = decodePoly(s); let a = 90, b = -90, c = 180, d = -180;
@@ -295,7 +313,7 @@ async function loadRegion(code) {
   return REG[code] = { e, bus, ways };
 }
 
-const MODE_LABEL = { bus: "Bus", tram: "Tramway", metro: "Métro", train: "Train" };
+const MODE_LABEL = { bus: "Bus", tram: "Tramway", metro: "Métro", train: "Train/RER" };
 
 function localBus(reg, site) {
   const { routes, stops } = reg.bus;
@@ -355,27 +373,29 @@ function regionsAround(site) {
 }
 
 function buildNet(regs) {
-  const lat = [], lon = [], sr = [], patR = [], patS = [], patT = [], coms = [];
+  const lat = [], lon = [], sr = [], patR = [], patS = [], patT = [], coms = [], rmode = [];
   let sOff = 0, rOff = 0;
   regs.forEach(r => {
     const b = r.bus;
     b.stops.forEach(s => { lat.push(s[0]); lon.push(s[1]); sr.push(s[5].map(x => [x[0] + rOff, x[1], x[2] || 0])); });
     (b.pat || []).forEach(q => { patR.push(q[0] + rOff); patS.push(q[1].map(i => i + sOff)); patT.push(q[2]); });
     (b.com || []).forEach(c => coms.push(c));
+    b.routes.forEach(r => rmode.push(r.m));
     sOff += b.stops.length; rOff += b.routes.length;
   });
   const S = lat.length, base = []; let P = 0;
   patS.forEach(a => { base.push(P); P += a.length; });
+  const pMode = new Uint8Array(P), MI = { bus: 0, tram: 1, metro: 2, train: 3 };
   const pStop = new Int32Array(P), pRoute = new Int32Array(P), pDt = new Float32Array(P), pPrev = new Uint8Array(P);
   const stopP = Array.from({ length: S }, () => []);
   patS.forEach((a, k) => a.forEach((st, j) => {
-    const id = base[k] + j; pStop[id] = st; pRoute[id] = patR[k]; stopP[st].push(id);
+    const id = base[k] + j; pStop[id] = st; pRoute[id] = patR[k]; pMode[id] = MI[rmode[patR[k]]] ?? 0; stopP[st].push(id);
     if (j > 0) { pPrev[id] = 1; pDt[id] = Math.max(0, patT[k][j] - patT[k][j - 1]); }
   }));
   const grid = new Map(), K = 0.003;
   const gk = (a, o) => Math.floor(a / K) * 100000 + Math.floor(o / (K * 1.3));
   for (let i = 0; i < S; i++) { const k = gk(lat[i], lon[i]); (grid.get(k) || grid.set(k, []).get(k)).push(i); }
-  return { S, P, lat, lon, sr, pStop, pRoute, pDt, pPrev, stopP, grid, gk, K, coms, waits: {} };
+  return { S, P, lat, lon, sr, pMode, pStop, pRoute, pDt, pPrev, stopP, grid, gk, K, coms, waits: {} };
 }
 
 function getWaits(net, mode) {
@@ -420,7 +440,7 @@ class Heap {
 }
 
 // Temps (min) pour rejoindre le site depuis chaque arrêt, recherche inversée
-function isoStops(net, site, mode) {
+function isoStops(net, site, mode, mask) {
   const { S, P } = net, wait = getWaits(net, mode);
   const DS = new Float64Array(S).fill(Infinity), DP = new Float64Array(P).fill(Infinity), h = new Heap();
   nearStops(net, site[0], site[1], MAX_WALK_MIN * WALK / DETOUR).forEach(([i, d]) => { const t = d * DETOUR / WALK; DS[i] = t; h.push(t, i); });
@@ -428,7 +448,7 @@ function isoStops(net, site, mode) {
     const [d, x] = h.pop(); if (d > ISO_MAX) break;
     if (x < S) {
       if (d > DS[x]) continue;
-      for (const id of net.stopP[x]) if (d < DP[id]) { DP[id] = d; h.push(d, S + id); }
+      for (const id of net.stopP[x]) if (mask[net.pMode[id]] && d < DP[id]) { DP[id] = d; h.push(d, S + id); }
       for (const [n, dist] of nearStops(net, net.lat[x], net.lon[x], 250)) {
         const nd = d + dist * DETOUR / WALK + 1; if (nd < DS[n]) { DS[n] = nd; h.push(nd, n); }
       }
@@ -457,7 +477,7 @@ function isoRaster(net, DS, site) {
       const t = t0 + dm * DETOUR / WALK, k = y * W + x; if (t < T[k]) T[k] = t;
     }
   };
-  for (let i = 0; i < net.S; i++) if (DS[i] < 60) splat(net.lat[i], net.lon[i], DS[i], 60 - DS[i]);
+  for (let i = 0; i < net.S; i++) if (DS[i] < ISO_MAX) splat(net.lat[i], net.lon[i], DS[i], ISO_MAX - DS[i]);
   splat(site[0], site[1], 0, 20);
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d"), img = ctx.createImageData(W, H);
@@ -485,7 +505,7 @@ function isoSummary(net, R, site) {
 function fmtPop(n) { return Math.round(n).toLocaleString("fr-FR").replace(/\u202f|\u00a0/g, " "); }
 
 async function computeIso(site) {
-  gIso.clearLayers(); gRing.clearLayers();
+  gIso.clearLayers(); gRing.clearLayers(); lastIso = null;
   const box = $("isoBox"); if (!INDEX) { box.style.display = "none"; return; }
   box.style.display = "block";
   L.circle(site, { radius: 3400, color: "#7c3aed", weight: 1.5, dashArray: "5 4", fill: false }).bindTooltip("Vélo, environ 15 min").addTo(gRing);
@@ -493,6 +513,7 @@ async function computeIso(site) {
   $("tRing").checked ? gRing.addTo(map) : map.removeLayer(gRing);
   const regs = regionsAround(site);
   if (!regs.length || !regs.some(g => g.bus)) { $("isoStatus").textContent = "Zones de temps indisponibles hors des régions préchargées."; $("isoTable").innerHTML = ""; return; }
+  const prevStatus = $("status").textContent;
   $("isoStatus").textContent = "Calcul des zones de temps…";
   await new Promise(r => setTimeout(r, 30));
   try {
@@ -500,8 +521,9 @@ async function computeIso(site) {
     if (!loaded.every(r => r.bus.pat)) { $("isoStatus").textContent = "Les données préchargées ne contiennent pas encore les parcours : relancer build_region.py."; return; }
     const key = loaded.map(r => r.e.code + r.e.generated).join("|");
     const net = NETS[key] ||= buildNet(loaded);
-    const DS = isoStops(net, site, $("isoMode").value);
+    const DS = isoStops(net, site, $("isoMode").value, ["mBus", "mTram", "mMetro", "mTrain"].map(i => $(i).checked));
     const R = isoRaster(net, DS, site);
+    lastIso = R;
     if ($("tIso").checked) L.imageOverlay(R.url, R.bounds, { pane: "iso", interactive: false }).addTo(gIso);
     const sm = isoSummary(net, R, site);
     const hex = c => `rgb(${c.join(",")})`;
@@ -511,8 +533,38 @@ async function computeIso(site) {
       `<div class="note" style="margin-top:4px">Population de référence : ${fmtPop(sm.total)} habitants (${loaded.map(r => r.e.name).join(", ")}).</div>`;
     $("isoStatus").textContent = `Arrivée au site en ${$("isoMode").value === "pointe" ? "heure de pointe" : "journée moyenne"}.`;
   } catch (e) { console.warn(e); $("isoStatus").textContent = "Calcul impossible : " + e.message; }
+  if ($("status").textContent.startsWith("Chargement")) setStatus(prevStatus);
 }
-$("tIso").onchange = $("tRing").onchange = $("isoMode").onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); };
+let lastIso = null;
+const gHome = L.layerGroup().addTo(map);
+const fmtDur = m => { m = Math.round(m); if (m < 60) return m + " min"; return Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0"); };
+function setLock() { map.getContainer().style.cursor = $("lockSite").checked ? "crosshair" : ""; }
+$("lockSite").onchange = setLock;
+
+async function estimateFrom(ll) {
+  const site = [lastSite.lat, lastSite.lon], pt = [ll.lat, ll.lng];
+  gHome.clearLayers();
+  const d = hav(site, pt), km = d / 1000;
+  L.polyline([site, pt], { color: "#7c3aed", weight: 2, dashArray: "4 6" }).addTo(gHome);
+  const mk = L.circleMarker(pt, { radius: 8, color: "#fff", weight: 2, fillColor: "#7c3aed", fillOpacity: 1 }).addTo(gHome);
+  const walk = d * DETOUR / WALK, bike = km * 1.25 / 16 * 60, ebike = km * 1.25 / 21 * 60;
+  const car = km * 1.3 / (km <= 10 ? 28 : km <= 30 ? 45 : 65) * 60;
+  let tc = "non calculé hors des régions préchargées";
+  if (lastIso) {
+    const R = lastIso, y = Math.floor((pt[0] - R.latMin) / R.cLat), x = Math.floor((pt[1] - R.lonMin) / R.cLon);
+    if (y >= 0 && y < R.H && x >= 0 && x < R.W) { const t = R.T[y * R.W + x]; tc = isFinite(t) ? "environ " + fmtDur(t) : "pas de liaison en moins de 1 h 15"; }
+    else tc = "hors de la zone calculée (70 km)";
+  }
+  const row = (a, b) => `<tr><td style="padding:2px 10px 2px 0">${a}</td><td><b>${b}</b></td></tr>`;
+  const html = label => `<b>${esc(label)}</b><br>${fmtM(d)} du site à vol d'oiseau<table style="margin-top:6px;font-size:13px">` +
+    row("Transports en commun", tc) + row("Vélo", "environ " + fmtDur(bike)) + row("Vélo électrique", "environ " + fmtDur(ebike)) +
+    row("À pied", "environ " + fmtDur(walk)) + row("Voiture (indicatif)", "environ " + fmtDur(car)) +
+    `</table><div style="font-size:11px;color:#636363;margin-top:6px;max-width:240px">Estimations de porte à porte. Vélo : distance x 1,25 à 16 km/h (21 km/h en électrique). Voiture hors stationnement et embouteillages.</div>`;
+  mk.bindPopup(html("Point choisi")).openPopup();
+  reverse(pt[0], pt[1]).then(l => mk.setPopupContent(html(l)));
+}
+
+["tIso", "tRing", "isoMode", "mBus", "mTram", "mMetro", "mTrain"].forEach(i => $(i).onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); });
 
 // ---------- Note ----------
 function scoreAll(bus, velo) {
@@ -567,7 +619,7 @@ function draw(site, label, bus, velo) {
 
   bus.lines.forEach(g => {
     const grp = L.layerGroup();
-    g.segs.forEach(s => s.length > 1 && L.polyline(s, { color: g.color, weight: 3.5, opacity: .75 }).addTo(grp));
+    g.segs.forEach(s => s.length > 1 && L.polyline(s, { color: g.color, weight: g.mode === "bus" ? 3.5 : 5.5, opacity: g.mode === "bus" ? .75 : .9 }).addTo(grp));
     grp.addTo(gBus); lineLayers[g.key] = { grp, g };
   });
   const byKey = {}; bus.lines.forEach(l => byKey[l.key] = l);
@@ -580,7 +632,7 @@ function draw(site, label, bus, velo) {
   });
 
   const box = $("linesBox"); box.style.display = "block";
-  const chip = g => `<span class="chip" data-k="${esc(g.key)}" title="${esc((MODE_LABEL[g.mode] ? MODE_LABEL[g.mode] + " : " : "") + ([...g.names][0] || "") + (g.network ? " (" + g.network + ")" : ""))}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${fmtM(g.dmin)}${g.perDay ? ", " + g.perDay + "/j" : ""}</em></span>`;
+  const chip = g => `<span class="chip" data-k="${esc(g.key)}" title="${esc((MODE_LABEL[g.mode] ? MODE_LABEL[g.mode] + " : " : "") + ([...g.names][0] || "") + (g.network ? " (" + g.network + ")" : ""))}"><b style="background:${g.color}">${esc(g.ref)}</b><em>${g.mode !== "bus" && MODE_LABEL[g.mode] ? MODE_LABEL[g.mode] + ", " : ""}${fmtM(g.dmin)}${g.perDay ? ", " + g.perDay + "/j" : ""}</em></span>`;
   const nearL = bus.lines.filter(g => g.dmin <= R_BUS), farL = bus.lines.filter(g => g.dmin > R_BUS).sort((x, y) => x.dmin - y.dmin);
   $("nLines").textContent = nearL.length + (farL.length ? " + " + farL.length + " plus loin" : "");
   $("lines").innerHTML = (nearL.length ? nearL.map(chip).join("") : '<span class="note">Aucune ligne à moins de 800 m.</span>') +
@@ -620,6 +672,8 @@ $("dVelo").onchange = e => { DISP_VELO = +e.target.value; if (lastSite) analyse(
 async function analyse(lat, lon, label) {
   const site = [lat, lon];
   lastSite = { lat, lon, label };
+  gHome.clearLayers(); lastIso = null;
+  $("lockBox").style.display = "block"; $("lockSite").checked = true; setLock();
   const code = pickRegion(lat, lon);
   if (code) {
     try {
@@ -630,7 +684,7 @@ async function analyse(lat, lon, label) {
       renderScore(scoreAll(bus, velo), velo);
       $("dataInfo").textContent = `Données : ${reg.e.name}, extraites le ${new Date(reg.e.generated).toLocaleDateString("fr-FR")} (horaires d'un jour de semaine type).`;
       setStatus(`${bus.stops.length} arrêt(s), ${bus.lines.length} ligne(s), ${velo.ways.filter(w => w.kind !== "calme").length} tronçon(s) cyclable(s).`);
-      computeIso(site);
+      computeIso(site).then(() => { const e = new URLSearchParams(location.search).get("est"); if (e) { const [a, b] = e.split(",").map(Number); estimateFrom({ lat: a, lng: b }); } });
       return;
     } catch (e) { console.warn(e); setStatus("Données préchargées indisponibles, bascule en direct…"); }
   }
@@ -668,10 +722,13 @@ $("f").addEventListener("submit", async ev => {
   } catch { setStatus("Le service d'adresses ne répond pas.", true); }
 });
 
-map.on("click", async e => { const label = await reverse(e.latlng.lat, e.latlng.lng); analyse(e.latlng.lat, e.latlng.lng, label); });
+map.on("click", async e => {
+  if (lastSite && $("lockSite").checked) return estimateFrom(e.latlng);
+  const label = await reverse(e.latlng.lat, e.latlng.lng); analyse(e.latlng.lat, e.latlng.lng, label);
+});
 
 const leg = L.control({ position: "bottomright" });
-leg.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.innerHTML = '<i style="border-color:#15803d"></i>Piste cyclable<br><i style="border-color:#65a30d;border-top-style:dashed"></i>Bande cyclable<br><i style="border-color:#a3a3a3;border-top-style:dotted"></i>Zone apaisée<br><i style="border-color:#1d4ed8"></i>Ligne de bus'; return d; };
+leg.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.innerHTML = '<i style="border-color:#15803d"></i>Piste cyclable<br><i style="border-color:#65a30d;border-top-style:dashed"></i>Bande cyclable<br><i style="border-color:#a3a3a3;border-top-style:dotted"></i>Zone apaisée<br><i style="border-color:#1d4ed8"></i>Ligne de bus<br><i style="border-color:#1d4ed8;border-top-width:7px"></i>Train, RER, métro, tram'; return d; };
 leg.addTo(map);
 loadIndex().then(() => {
   (new URLSearchParams(location.search).get("off") || "").split(",").filter(Boolean).forEach(id => { if ($(id)) $(id).checked = false; });
