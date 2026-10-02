@@ -154,6 +154,7 @@
     <div class="opts">
       <label><input type="checkbox" id="tIso" checked> Afficher les zones de temps</label>
       <label>Zones calculées pour <select id="isoWhat"><option value="tc" selected>Transports en commun</option><option value="bus">Bus seulement</option><option value="bike">Vélo (15 km/h)</option><option value="ebike">Vélo électrique (20 km/h)</option></select></label>
+      <label><input type="checkbox" id="isoWalk"> Compter la marche à pied dans les temps</label>
       <div style="display:flex;flex-wrap:wrap;gap:4px 14px">Modes pris en compte :
         <label><input type="checkbox" id="mBus" checked> Bus</label>
         <label><input type="checkbox" id="mTram" checked> Tramway</label>
@@ -296,7 +297,7 @@
   <h3>4.1 Zones de temps en transports en commun</h3>
   <p>Pour chaque point de la carte, l'outil estime le temps de porte à porte pour arriver au site. Le calcul part du site et remonte les réseaux (recherche inverse), avec les composantes suivantes&nbsp;:</p>
   <ul>
-    <li><b>Marche</b> jusqu'à l'arrêt&nbsp;: distance à vol d'oiseau multipliée par un coefficient de détour de 1,3, à 4,5&nbsp;km/h, dans la limite de 12&nbsp;minutes de marche.</li>
+    <li><b>Marche</b> jusqu'à l'arrêt, entre arrêts et jusqu'au site&nbsp;: distance à vol d'oiseau multipliée par un coefficient de détour de 1,3, à 4,5&nbsp;km/h, dans la limite de 12&nbsp;minutes de marche. <b>Par défaut, ce temps de marche n'est pas compté</b> dans les temps et les zones affichés&nbsp;: seuls l'attente, le trajet et 1&nbsp;minute par correspondance sont comptés, l'accès restant limité à environ 700&nbsp;m d'un arrêt, et la petite zone atteignable à pied seul autour du site n'est pas tracée. Une case «&nbsp;Compter la marche à pied dans les temps&nbsp;» rétablit le temps de porte à porte.</li>
     <li><b>Attente</b>&nbsp;: la moitié de l'intervalle entre deux passages, plus 1&nbsp;minute. L'intervalle est déduit du nombre de départs de la ligne à l'arrêt, un mardi type, en heure de pointe (7&nbsp;h à 9&nbsp;h et 17&nbsp;h à 19&nbsp;h) ou sur la journée selon le choix de l'utilisateur, plafonné à 90&nbsp;minutes.</li>
     <li><b>Trajet</b>&nbsp;: durée médiane entre arrêts observée dans les horaires théoriques, sur le parcours le plus fréquent de chaque ligne (deux parcours maximum par ligne).</li>
     <li><b>Correspondances</b>&nbsp;: marche jusqu'à 250&nbsp;m entre arrêts, plus 1&nbsp;minute, avec une nouvelle attente à chaque montée.</li>
@@ -372,12 +373,14 @@
     <tr><td>Marche plus rapide (5,4&nbsp;km/h)</td><td class="num">−3 à −4&nbsp;%</td><td class="num">+1 à +13&nbsp;%</td></tr>
     <tr><td>Détour de marche de 1,15 au lieu de 1,3</td><td class="num">−2 à −3&nbsp;%</td><td class="num">+1 à +9&nbsp;%</td></tr>
     <tr><td>Détour de marche de 1,5</td><td class="num">+3&nbsp;%</td><td class="num">−2 à −9&nbsp;%</td></tr>
+    <tr><td>Marche non comptée dans les temps (réglage par défaut)</td><td class="num">−28 à −42&nbsp;%</td><td class="num">+9 à +145&nbsp;%</td></tr>
     <tr><td>Attente réduite à un quart de l'intervalle (au lieu de la moitié)</td><td class="num">−6 à −12&nbsp;%</td><td class="num">+10 à +33&nbsp;%</td></tr>
     <tr><td>Attente égale à l'intervalle complet</td><td class="num">+11 à +20&nbsp;%</td><td class="num">−16 à −31&nbsp;%</td></tr>
     <tr><td>Temps de trajet des véhicules majorés de 10&nbsp;%</td><td class="num">+4 à +6&nbsp;%</td><td class="num">−4 à −11&nbsp;%</td></tr>
     <tr><td>Fréquences d'une journée moyenne au lieu de l'heure de pointe</td><td class="num">+1 à +6&nbsp;%</td><td class="num">−2 à −13&nbsp;%</td></tr>
   </table></div>
   <p><b>Ce qu'il faut retenir&nbsp;:</b> l'hypothèse la plus influente est celle de l'attente. En cumulant les écarts maximaux mesurés (hypothèse prudente, rarement atteinte en pratique), la durée d'un trajet en transports en commun peut varier d'environ <b>−20&nbsp;% à +35&nbsp;%</b> autour de la valeur affichée. L'étendue d'une zone de temps varie d'environ <b>±10&nbsp;%</b> selon les hypothèses de marche, et jusqu'à <b>±30&nbsp;%</b> selon l'hypothèse d'attente. Ces ordres de grandeur ne couvrent pas les retards, annulations, ruptures de correspondance ni la saturation, qui n'ont pas été mesurés.</p>
+  <p><b>Effet du réglage sur la marche.</b> Ne pas compter la marche (réglage par défaut) réduit les durées affichées de 28&nbsp;% à 42&nbsp;% en médiane, soit environ 10 à 16&nbsp;minutes, et agrandit fortement les zones&nbsp;: de +30 à +68&nbsp;% à 45&nbsp;minutes selon l'agglomération (Nice, Paris, Rennes). Les temps affichés sont alors des temps hors marche, nettement inférieurs à ceux d'un trajet réel de porte à porte. À utiliser pour comparer des réseaux ou des sites entre eux, pas pour annoncer une durée de trajet.</p>
 
   <h3>5.2 Temps par la route (vélo, voiture) et distances</h3>
   <p>Méthode&nbsp;: 60 trajets tirés au hasard (12 autour de chacun de 5 sites&nbsp;: Nice, Lyon, Paris, Bordeaux, Rennes), entre 2 et 25&nbsp;km du site. Chaque trajet a été calculé par deux moteurs d'itinéraires indépendants fondés sur les mêmes données de voirie.</p>
@@ -782,17 +785,17 @@ class Heap {
 }
 
 // Temps (min) pour rejoindre le site depuis chaque arrêt, recherche inversée
-function isoStops(net, site, mode, mask) {
+function isoStops(net, site, mode, mask, walkOn) {
   const { S, P } = net, wait = getWaits(net, mode);
   const DS = new Float64Array(S).fill(Infinity), DP = new Float64Array(P).fill(Infinity), h = new Heap();
-  nearStops(net, site[0], site[1], MAX_WALK_MIN * WALK / DETOUR).forEach(([i, d]) => { const t = d * DETOUR / WALK; DS[i] = t; h.push(t, i); });
+  nearStops(net, site[0], site[1], MAX_WALK_MIN * WALK / DETOUR).forEach(([i, d]) => { const t = walkOn ? d * DETOUR / WALK : 0; DS[i] = t; h.push(t, i); });
   while (h.size) {
     const [d, x] = h.pop(); if (d > ISO_MAX) break;
     if (x < S) {
       if (d > DS[x]) continue;
       for (const id of net.stopP[x]) if (mask[net.pMode[id]] && d < DP[id]) { DP[id] = d; h.push(d, S + id); }
       for (const [n, dist] of nearStops(net, net.lat[x], net.lon[x], 250)) {
-        const nd = d + dist * DETOUR / WALK + 1; if (nd < DS[n]) { DS[n] = nd; h.push(nd, n); }
+        const nd = d + (walkOn ? dist * DETOUR / WALK : 0) + 1; if (nd < DS[n]) { DS[n] = nd; h.push(nd, n); }
       }
     } else {
       const id = x - S; if (d > DP[id]) continue;
@@ -804,23 +807,23 @@ function isoStops(net, site, mode, mask) {
   return DS;
 }
 
-function isoGrid(net, DS, site) {
+function isoGrid(net, DS, site, walkOn) {
   const dla = ISO_RADIUS_KM / 111, dlo = dla / Math.cos(site[0] * Math.PI / 180);
   const latMin = site[0] - dla, lonMin = site[1] - dlo;
   const cLat = CELL_M / 111000, cLon = cLat / Math.cos(site[0] * Math.PI / 180);
   const H = Math.ceil(2 * dla / cLat), W = Math.ceil(2 * dlo / cLon);
   const T = new Float32Array(W * H).fill(Infinity);
   const splat = (la, lo, t0, maxMin) => {
-    const rM = Math.min(maxMin, MAX_WALK_MIN) * WALK / DETOUR, r = Math.ceil(rM / CELL_M);
+    const rM = (walkOn ? Math.min(maxMin, MAX_WALK_MIN) : MAX_WALK_MIN) * WALK / DETOUR, r = Math.ceil(rM / CELL_M);
     const cy = Math.floor((la - latMin) / cLat), cx = Math.floor((lo - lonMin) / cLon);
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const y = cy + dy, x = cx + dx; if (y < 0 || y >= H || x < 0 || x >= W) continue;
       const dm = Math.hypot(dy, dx) * CELL_M; if (dm > rM) continue;
-      const t = t0 + dm * DETOUR / WALK, k = y * W + x; if (t < T[k]) T[k] = t;
+      const t = t0 + (walkOn ? dm * DETOUR / WALK : 0), k = y * W + x; if (t < T[k]) T[k] = t;
     }
   };
   for (let i = 0; i < net.S; i++) if (DS[i] < ISO_MAX) splat(net.lat[i], net.lon[i], DS[i], ISO_MAX - DS[i]);
-  splat(site[0], site[1], 0, 20);
+  if (walkOn) splat(site[0], site[1], 0, 20);
   return { T, W, H, latMin, lonMin, cLat, cLon };
 }
 
@@ -923,7 +926,7 @@ async function computeIsoCore(site) {
   const box = $("isoBox"); if (!INDEX) { box.style.display = "none"; return; }
   box.style.display = "block";
   const what = $("isoWhat").value, tcLike = what === "tc" || what === "bus";
-  ["isoMode", "mBus", "mTram", "mMetro", "mTrain"].forEach(i => { $(i).disabled = !tcLike; });
+  ["isoMode", "mBus", "mTram", "mMetro", "mTrain", "isoWalk"].forEach(i => { $(i).disabled = !tcLike; });
   const regs = regionsAround(site);
   if (!regs.length || !regs.some(g => g.bus)) { $("isoStatus").textContent = "Zones de temps indisponibles hors des régions préchargées."; $("isoTable").innerHTML = ""; return; }
   const prevStatus = $("status").textContent;
@@ -936,10 +939,11 @@ async function computeIsoCore(site) {
     const net = NETS[key] ||= buildNet(loaded);
     const freq = $("isoMode").value, when = freq === "pointe" ? "heure de pointe" : "journée moyenne";
     // temps en transports en commun : toujours calculés (estimations au clic, collaborateurs)
-    lastIso = isoGrid(net, isoStops(net, site, freq, ["mBus", "mTram", "mMetro", "mTrain"].map(i => $(i).checked)), site);
+    const walkOn = $("isoWalk").checked, wtxt = walkOn ? "" : " Temps de marche non comptés (accès à l'arrêt, correspondances à pied, dernier tronçon).";
+    lastIso = isoGrid(net, isoStops(net, site, freq, ["mBus", "mTram", "mMetro", "mTrain"].map(i => $(i).checked), walkOn), site, walkOn);
     let rings, label, note;
-    if (what === "tc") { rings = ringsFromGrid(lastIso); label = "transports en commun"; note = `Temps de porte à porte pour arriver au site en ${when}.`; }
-    else if (what === "bus") { rings = ringsFromGrid(isoGrid(net, isoStops(net, site, freq, [true, false, false, false]), site)); label = "bus seulement"; note = `Temps de porte à porte en bus pour arriver au site en ${when}.`; }
+    if (what === "tc") { rings = ringsFromGrid(lastIso); label = "transports en commun"; note = (walkOn ? `Temps de porte à porte pour arriver au site en ${when}.` : `Temps d'attente, de trajet et de correspondance pour arriver au site en ${when}.`) + wtxt; }
+    else if (what === "bus") { rings = ringsFromGrid(isoGrid(net, isoStops(net, site, freq, [true, false, false, false], walkOn), site, walkOn)); label = "bus seulement"; note = (walkOn ? `Temps de porte à porte en bus pour arriver au site en ${when}.` : `Temps d'attente et de trajet en bus pour arriver au site en ${when}.`) + wtxt; }
     else {
       const kmh = what === "bike" ? 15 : 20; label = what === "bike" ? "vélo" : "vélo électrique";
       try {
@@ -1014,14 +1018,14 @@ async function estimateFrom(ll) {
       `</table><div style="font-size:10.5px;color:#636363;margin-top:4px;max-width:300px">CO2e, facteurs ADEME (Base Carbone), amont et combustion. Distance routière commune aux modes motorisés. Par an : 2 trajets par jour, ${GES_DAYS} jours. Vélo et marche : hors fabrication et alimentation.</div></div>`;
   };
   const html = () => `<b>${esc(label)}</b><br>${fmtM(d)} du site à vol d'oiseau<table style="margin-top:6px;font-size:13px">` +
-    row("Transports en commun", `<b>${tc}</b>`) + row("Vélo", cell("bike")) + row("Vélo électrique", cell("ebike")) + row("À pied", cell("walk")) + row("Voiture", cell("car")) +
+    row("Transports en commun" + ($("isoWalk").checked ? "" : " (hors marche)"), `<b>${tc}</b>`) + row("Vélo", cell("bike")) + row("Vélo électrique", cell("ebike")) + row("À pied", cell("walk")) + row("Voiture", cell("car")) +
     `</table><div style="font-size:11px;color:#636363;margin-top:6px;max-width:300px">${road ? "Vélo, pied et voiture : temps par la route (OpenStreetMap), hors embouteillages et stationnement. Vélo à 15 km/h, électrique à 20 km/h." : "Calcul par la route en cours…"}</div>` + gesHtml();
   mk.bindPopup(html(), { maxWidth: 340 }).openPopup();
   reverse(pt[0], pt[1]).then(l => { label = l; mk.setPopupContent(html()); });
   roadTimes(site, pt).then(r => { road = r; mk.setPopupContent(html()); });
 }
 
-["tIso", "isoWhat", "isoMode", "mBus", "mTram", "mMetro", "mTrain"].forEach(i => $(i).onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); });
+["tIso", "isoWhat", "isoMode", "mBus", "mTram", "mMetro", "mTrain", "isoWalk"].forEach(i => $(i).onchange = () => { if (lastSite) computeIso([lastSite.lat, lastSite.lon]); });
 
 
 // ---------- Covoiturage (Base Nationale des Lieux de Covoiturage) ----------
@@ -1278,7 +1282,7 @@ function renderStaff() {
     (hasTc ? BANDS.map(b => tr(`Transports en commun ≤ ${b} min`, cnt(r => r.tc !== null && r.tc <= b))).join("") + tr("Plus d'1 h ou sans liaison", cnt(r => r.tc !== null && !(r.tc <= 60))) :
       `<tr><td colspan="3" style="padding:4px 0" class="note">Zones de temps indisponibles (hors régions préchargées) : temps en transports en commun non calculés.</td></tr>`) +
     [15, 30, 45].map(m => tr(`Vélo ≤ ${m} min`, cnt(r => r.bike <= m))).join("") + tr("Vélo électrique ≤ 30 min", cnt(r => r.ebike <= 30)) +
-    `</table><div class="note" style="margin-top:4px">Distance médiane à vol d'oiseau : ${med.toFixed(1).replace(".", ",")} km. ${roadNote}</div>` +
+    `</table><div class="note" style="margin-top:4px">Distance médiane à vol d'oiseau : ${med.toFixed(1).replace(".", ",")} km. ${$("isoWalk").checked ? "" : "Temps en transports en commun hors marche. "}${roadNote}</div>` +
     `<div class="note" style="margin-top:6px"><b style="color:var(--ink)">Principaux lieux</b></div><ul class="note" style="margin:2px 0 0;padding-left:18px">` +
     rows.slice(0, 8).map(r => `<li>${esc(r.label)} : ${r.n} pers., ${(r.kmRoad ?? r.km).toFixed(1).replace(".", ",")} km${r.kmRoad != null ? " par la route" : ""}, ${r.tc === null ? "TC non calculé" : isFinite(r.tc) && r.tc <= 75 ? "TC " + fmtDur(r.tc) : "TC > 1 h 15"}</li>`).join("") + `</ul>`;
 }
